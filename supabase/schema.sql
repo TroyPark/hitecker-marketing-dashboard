@@ -68,15 +68,18 @@ create table if not exists business_daily (
 );
 create index if not exists business_daily_brand_date_idx on business_daily (brand, date desc);
 
--- ── 4. 월별 예산 ─────────────────────────────────────────────
+-- ── 4. 월별 예산 (매체 단위) ─────────────────────────────────
+-- 사업 예산은 따로 두지 않는다. 매체별 금액의 합이 곧 사업 예산이다.
 create table if not exists budgets (
   month      date not null,                 -- 항상 매월 1일로 정규화해서 넣는다
   brand      text not null references brands(code),
+  platform   text not null references platforms(code),
   amount     numeric not null default 0,
   updated_at timestamptz default now(),
   updated_by uuid references auth.users(id),
-  primary key (month, brand)
+  primary key (month, brand, platform)
 );
+create index if not exists budgets_brand_month_idx on budgets (brand, month desc);
 
 -- ── 5. 업로드 이력 ───────────────────────────────────────────
 create table if not exists upload_logs (

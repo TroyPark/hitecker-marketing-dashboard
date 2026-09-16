@@ -307,6 +307,38 @@ pre.sql {
   padding: 14px 16px; overflow-x: auto; font-size: 12px; line-height: 1.55;
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text-secondary);
 }
+/* ── 미디어 믹스 ─────────────────────────────────────────────── */
+.mix-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 14px; font-size: 13px; }
+.mix-bar label { color: var(--text-muted); font-size: 12px; }
+.mix-bar .unit { color: var(--text-muted); font-size: 12px; margin-left: -4px; }
+.mix-bar .grow { flex: 1; }
+.mix-bar input[type="text"] {
+  width: 150px; padding: 5px 9px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--plane); text-align: right; font-variant-numeric: tabular-nums;
+}
+.mix-bar input[type="month"] { padding: 5px 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--plane); }
+#mix-status { font-size: 12.5px; }
+td .mix-in {
+  width: 92px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--plane); text-align: right; font-variant-numeric: tabular-nums;
+}
+td .mix-in:focus { outline: 2px solid var(--brand-accent); outline-offset: -1px; }
+
+/* ── 모달 ────────────────────────────────────────────────────── */
+.modal-back {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+  background: rgba(11,11,11,.42); padding: 20px;
+}
+.modal {
+  width: 100%; max-width: 400px; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 12px; padding: 22px 22px 18px;
+}
+.modal h3 { margin: 0 0 16px; font-size: 16px; font-weight: 650; }
+.modal .hint { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+.modal-err { min-height: 18px; margin: 2px 0 0; font-size: 12px; color: var(--critical); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.add-btn { border-style: dashed !important; color: var(--text-muted); }
+
 .toast {
   position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(12px);
   background: var(--text-primary); color: var(--surface-1); padding: 9px 16px;
@@ -333,7 +365,7 @@ pre.sql {
     <p class="sub">광고 · 사업 성과</p>
     <div class="field">
       <label for="email">이메일</label>
-      <input id="email" type="email" value="marketing@hitecker.co.kr" autocomplete="username">
+      <input id="email" type="email" value="marketing@kfo.or.kr" autocomplete="username">
     </div>
     <div class="field">
       <label for="pw">비밀번호</label>
@@ -354,10 +386,11 @@ pre.sql {
     <nav>
       <button data-page="exec" aria-current="page">경영 대시보드</button>
       <button data-page="ads">광고 운영</button>
+      <button data-page="mix">미디어 믹스</button>
       <button data-page="input">데이터 입력</button>
     </nav>
     <div class="side-foot">
-      <span class="who">marketing@hitecker.co.kr</span><br>역할: admin
+      <span class="who">marketing@kfo.or.kr</span><br>역할: admin
       <div><button id="theme-toggle">테마 전환</button><button id="logout">로그아웃</button></div>
     </div>
   </aside>
@@ -371,6 +404,7 @@ pre.sql {
     <!-- 필터 바: 페이지가 스코프하는 모든 카드 위에 한 줄 -->
     <div class="filters" id="filters">
       <label class="inline">기간</label>
+      <button class="chip" data-range="1">전일</button>
       <button class="chip" data-range="7">최근 7일</button>
       <button class="chip" data-range="30" aria-pressed="true">최근 30일</button>
       <button class="chip" data-range="90">최근 90일</button>
@@ -482,6 +516,41 @@ pre.sql {
       </div>
     </section>
 
+    <!-- ══ 미디어 믹스 ════════════════════════════════════════ -->
+    <section id="page-mix" hidden>
+      <div class="card">
+        <div class="card-head">
+          <div><h3>믹스 설계</h3>
+            <p class="cap">총 예산을 매체에 배분한다. 저장하면 월별 예산으로 들어간다</p></div>
+          <div class="tools">
+            <button class="btn" id="mix-even">균등 배분</button>
+            <button class="btn" id="mix-prev">전월 집행 비율</button>
+            <button class="btn solid" id="mix-save">월별 예산에 저장</button>
+          </div>
+        </div>
+        <div class="mix-bar">
+          <label>사업</label><select id="mix-brand"></select>
+          <label>월</label><input type="month" id="mix-month">
+          <label>총 예산</label>
+          <input type="text" id="mix-total" inputmode="numeric" placeholder="0"><span class="unit">원</span>
+          <span class="grow"></span>
+          <span id="mix-status"></span>
+        </div>
+        <div style="overflow-x:auto"><table id="plan-table"></table></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><div><h3>배분 미리보기</h3><p class="cap">괄호는 비중</p></div></div>
+          <div class="plot" id="plan-plot"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>저장된 월별 예산</h3><p class="cap">선택한 사업</p></div></div>
+          <div style="max-height:360px;overflow:auto"><table id="mix-saved"></table></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ══ 데이터 입력 ════════════════════════════════════════ -->
     <section id="page-input" hidden>
       <div class="sheet-tabs" id="sheet-brands"></div>
@@ -530,6 +599,30 @@ pre.sql {
       </div>
     </section>
   </main>
+</div>
+
+<!-- 사업 / 매체 추가 -->
+<div class="modal-back" id="modal" hidden>
+  <form class="modal" id="modal-form">
+    <h3 id="modal-title">사업 추가</h3>
+    <div class="field">
+      <label for="m-ko" id="m-ko-label">사업명</label>
+      <input id="m-ko" required maxlength="40" placeholder="예: 내일하이">
+    </div>
+    <div class="field">
+      <label for="m-code">코드 <span class="hint">영문·숫자·밑줄. 저장 후에는 바꿀 수 없습니다</span></label>
+      <input id="m-code" required maxlength="40" pattern="[A-Za-z0-9_]+" placeholder="예: Learnershigh">
+    </div>
+    <div class="field" id="m-channel-wrap" hidden>
+      <label for="m-channel">채널</label>
+      <input id="m-channel" maxlength="20" placeholder="예: Naver / Google / Meta">
+    </div>
+    <p class="modal-err" id="modal-err"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="modal-cancel">취소</button>
+      <button type="submit" class="btn solid" id="modal-ok">추가</button>
+    </div>
+  </form>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -613,25 +706,38 @@ const sbUpsert = (table, rows, onConflict) =>
     body: JSON.stringify(rows),
   });
 
-/* ══ 마스터 (엑셀 SQL값 시트) ═════════════════════════════════ */
+/* ══ 마스터 ═══════════════════════════════════════════════════
+   사업·매체는 화면에서 추가할 수 있다. Supabase 가 붙어 있으면 거기서 읽고,
+   아니면 아래 기본값(엑셀 SQL값 시트)으로 시작한다. */
 const BRANDS = [
-  { code: "Learnershigh", ko: "내일하이", slot: 1 },
-  { code: "KFO",          ko: "KFO",     slot: 2 },
-  { code: "Oracle",       ko: "오라클",   slot: 3 },
-  { code: "Knewdeal",     ko: "K-뉴딜",   slot: 4 },
+  { code: "Learnershigh", ko: "내일하이" },
+  { code: "KFO",          ko: "KFO" },
+  { code: "Oracle",       ko: "오라클" },
+  { code: "Knewdeal",     ko: "K-뉴딜" },
 ];
 const PLATFORMS = [
-  { code: "Naver_brand",         ko: "네이버 브랜드검색",  slot: 1 },
-  { code: "Naver_sa",            ko: "네이버 파워링크",    slot: 2 },
-  { code: "Naver_powercontents", ko: "네이버 파워컨텐츠",  slot: 3 },
-  { code: "Google_SA",           ko: "구글 검색광고",      slot: 4 },
-  { code: "Google_display",      ko: "구글 디스플레이",    slot: 5 },
-  { code: "Meta_sponsored",      ko: "메타 스폰서드",      slot: 6 },
-  { code: "Google_demandGen",    ko: "구글 디멘드젠",      slot: 7 },
-  { code: "Google_pmax",         ko: "구글 P-Max",        slot: 8 },
+  { code: "Naver_brand",         ko: "네이버 브랜드검색" },
+  { code: "Naver_sa",            ko: "네이버 파워링크" },
+  { code: "Naver_powercontents", ko: "네이버 파워컨텐츠" },
+  { code: "Google_SA",           ko: "구글 검색광고" },
+  { code: "Google_display",      ko: "구글 디스플레이" },
+  { code: "Meta_sponsored",      ko: "메타 스폰서드" },
+  { code: "Google_demandGen",    ko: "구글 디멘드젠" },
+  { code: "Google_pmax",         ko: "구글 P-Max" },
 ];
-const B_BY = Object.fromEntries(BRANDS.map(b => [b.code, b]));
-const P_BY = Object.fromEntries(PLATFORMS.map(p => [p.code, p]));
+let B_BY = {}, P_BY = {};
+function reindexMaster() {
+  // 색은 등록 순서로 고정한다. 필터로 일부를 빼도 남은 항목 색이 바뀌지 않는다.
+  BRANDS.forEach((b, i) => (b.slot = i));
+  PLATFORMS.forEach((p, i) => (p.slot = i));
+  B_BY = Object.fromEntries(BRANDS.map(b => [b.code, b]));
+  P_BY = Object.fromEntries(PLATFORMS.map(p => [p.code, p]));
+}
+reindexMaster();
+
+/* 검증된 팔레트는 8칸까지다. 9번째부터는 새 색을 만들지 않고 중립 회색으로 둔다
+   (색만으로 구분하지 않도록 차트는 직접 라벨과 범례를 항상 같이 쓴다). */
+const SLOT_MAX = 8;
 
 /* 배열 자체는 계속 같은 객체를 쓴다 (SHEETS 가 참조를 들고 있다). 내용만 갈아끼운다. */
 const ADS = window.ADS_DATA || [];
@@ -649,8 +755,12 @@ function recomputeDates() {
 recomputeDates();
 
 const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const brandColor = c => cssVar("--series-" + B_BY[c].slot);
-const platColor  = c => cssVar("--series-" + P_BY[c].slot);
+const slotVar = i => (i < SLOT_MAX ? `--series-${i + 1}` : "--text-muted");
+const slotCss = i => `var(${slotVar(i)})`;
+const brandColor = c => cssVar(slotVar(B_BY[c] ? B_BY[c].slot : SLOT_MAX));
+const platColor  = c => cssVar(slotVar(P_BY[c] ? P_BY[c].slot : SLOT_MAX));
+const brandKo = c => (B_BY[c] ? B_BY[c].ko : c);
+const platKo  = c => (P_BY[c] ? P_BY[c].ko : c);
 
 /* ══ 상태 ═════════════════════════════════════════════════════ */
 const state = {
@@ -1185,8 +1295,9 @@ function renderAdDetail() {
 /* ══ 스프레드시트 입력 ════════════════════════════════════════ */
 const sheetBrandOr = () => (state.sheetBrand === "*" ? state.brand : state.sheetBrand);
 const sheetPlatOr = () => (state.sheetPlat === "*" ? "Meta_sponsored" : state.sheetPlat);
-const BRAND_OPTS = BRANDS.map(b => [b.code, b.ko]);
-const PLAT_OPTS = PLATFORMS.map(p => [p.code, p.ko]);
+/* 사업·매체는 실행 중에 늘어나므로 그때그때 만든다 */
+const BRAND_OPTS = () => BRANDS.map(b => [b.code, b.ko]);
+const PLAT_OPTS = () => PLATFORMS.map(p => [p.code, p.ko]);
 const SHEETS = {
   ads: {
     title: "광고 실적", data: ADS, table: "ad_daily",
@@ -1223,12 +1334,13 @@ const SHEETS = {
     cols: [
       { k: "m", label: "월", type: "text", w: 104 },
       { k: "b", label: "사업", type: "select", opts: BRAND_OPTS, w: 96 },
+      { k: "p", label: "매체", type: "select", opts: PLAT_OPTS, w: 132 },
       { k: "amt", label: "예산", type: "num" },
     ],
-    blank: () => ({ m: state.to.slice(0, 7), b: sheetBrandOr(), amt: 0 }),
+    blank: () => ({ m: state.to.slice(0, 7), b: sheetBrandOr(), p: sheetPlatOr(), amt: 0 }),
     match: () => true,
-    conflict: "month,brand",
-    toRow: r => ({ month: r.m + "-01", brand: r.b, amount: r.amt }),   // 월은 1일로 정규화
+    conflict: "month,brand,platform",
+    toRow: r => ({ month: r.m + "-01", brand: r.b, platform: r.p, amount: r.amt }),  // 월은 1일로 정규화
   },
 };
 const MAX_SHEET_ROWS = 300;
@@ -1239,9 +1351,10 @@ const added = new Set();            // 새로 만든 row
 let sel = { r: 0, c: 0 };
 const dirtyCount = () => [...dirty.values()].reduce((n, s) => n + s.size, 0);
 
+const optsOf = col => (typeof col.opts === "function" ? col.opts() : col.opts);
 const cellText = (row, col) => {
   const v = row[col.k];
-  if (col.type === "select") return (col.opts.find(o => o[0] === v) || [v, v])[1];
+  if (col.type === "select") return (optsOf(col).find(o => o[0] === v) || [v, v])[1];
   if (col.type === "num") return num(v);
   return v == null ? "" : String(v);
 };
@@ -1256,8 +1369,8 @@ function buildSheet() {
   dirty.clear(); added.clear(); sel = { r: 0, c: 0 };
   drawSheet();
   const who = [
-    state.sheetBrand === "*" ? "전체 사업" : B_BY[state.sheetBrand].ko,
-    state.sheet === "ads" ? (state.sheetPlat === "*" ? "전체 매체" : P_BY[state.sheetPlat].ko) : null,
+    state.sheetBrand === "*" ? "전체 사업" : brandKo(state.sheetBrand),
+    state.sheet === "ads" ? (state.sheetPlat === "*" ? "전체 매체" : platKo(state.sheetPlat)) : null,
     cfg.table,
   ].filter(Boolean).join(" · ");
   $("#sheet-count").textContent = all.length
@@ -1315,7 +1428,7 @@ function commit(ri, ci, raw) {
   let v = raw;
   if (col.type === "num") v = Number(String(raw).replace(/[^\d.-]/g, "")) || 0;
   if (col.type === "select") {
-    const hit = col.opts.find(o => o[1] === raw || o[0] === raw);
+    const hit = optsOf(col).find(o => o[1] === raw || o[0] === raw);
     if (!hit) { toast(`'${raw}' 는 선택할 수 없는 값입니다`); return; }
     v = hit[0];
   }
@@ -1393,13 +1506,174 @@ function sheetPaste(e) {
   toast(`${n}개 셀 붙여넣기`);
 }
 
+/* ══ 미디어 믹스 ══════════════════════════════════════════════
+   총 예산을 매체에 배분하고, 그대로 budgets(월 × 사업 × 매체) 로 저장한다. */
+const mix = { brand: "", month: "", total: 0, amounts: {} };
+
+const parseNum = v => Number(String(v).replace(/[^\d.-]/g, "")) || 0;
+const prevMonth = m => {
+  const [y, mo] = m.split("-").map(Number);
+  return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`;
+};
+
+/** 저장돼 있는 예산을 불러와 편집 상태로 올린다 */
+function loadMix() {
+  mix.amounts = {};
+  BUDGET.filter(r => r.b === mix.brand && r.m === mix.month)
+    .forEach(r => (mix.amounts[r.p] = r.amt));
+  mix.total = Object.values(mix.amounts).reduce((a, b) => a + b, 0);
+  const tot = mix.total ? num(mix.total) : "";
+  $("#mix-total").value = tot;
+  $("#mix-total").setAttribute("value", tot);
+}
+
+const setTotalInput = v => {
+  const t = v ? num(v) : "";
+  $("#mix-total").value = t;
+  $("#mix-total").setAttribute("value", t);
+};
+const mixSum = () => PLATFORMS.reduce((s, p) => s + (mix.amounts[p.code] || 0), 0);
+
+/** 선택한 월의 전월 실제 집행액 (매체별) */
+function prevSpend() {
+  const pm = prevMonth(mix.month);
+  const out = {};
+  ADS.filter(r => r.b === mix.brand && r.d.slice(0, 7) === pm)
+    .forEach(r => (out[r.p] = (out[r.p] || 0) + r.cost));
+  return out;
+}
+
+function renderMix() {
+  const spend = prevSpend();
+  const sum = mixSum();
+  const rows = PLATFORMS.map(p => ({
+    code: p.code, name: p.ko, color: platColor(p.code),
+    amt: mix.amounts[p.code] || 0,
+    share: sum ? (mix.amounts[p.code] || 0) / sum : 0,
+    prev: spend[p.code] || 0,
+  }));
+
+  const t = $("#plan-table");
+  t.innerHTML = "";
+  t.append(el("thead", {}, el("tr", { html:
+    ["매체", "비중", "예산", "전월 집행", "전월 대비"].map(h => `<th>${h}</th>`).join("") })));
+  const body = el("tbody");
+  for (const r of rows) {
+    const diff = r.prev ? (r.amt - r.prev) / r.prev : NaN;
+    const tr = el("tr", { html:
+      `<td><span class="cell-name"><i style="background:${r.color}"></i>${r.name}</span></td>
+       <td><input class="mix-in" data-mix-share="${r.code}" value="${(r.share * 100).toFixed(1)}">%</td>
+       <td><input class="mix-in" data-mix-amt="${r.code}" value="${r.amt ? num(r.amt) : ""}"></td>
+       <td>${r.prev ? num(r.prev) : "–"}</td>
+       <td>${isFinite(diff)
+              ? `<span class="${diff >= 0 ? "up-good" : "down-bad"}">${diff >= 0 ? "▲" : "▼"} ${Math.abs(diff * 100).toFixed(0)}%</span>`
+              : "–"}</td>` });
+    body.append(tr);
+  }
+  const prevTotal = Object.values(spend).reduce((a, b) => a + b, 0);
+  body.append(el("tr", { class: "total", html:
+    `<td>합계</td><td>${sum ? "100.0%" : "–"}</td><td>${num(sum)}</td>
+     <td>${prevTotal ? num(prevTotal) : "–"}</td><td></td>` }));
+  t.append(body);
+
+  document.querySelectorAll("[data-mix-amt]").forEach(inp => inp.onchange = () => {
+    mix.amounts[inp.dataset.mixAmt] = parseNum(inp.value);
+    mix.total = mixSum();
+    setTotalInput(mix.total);
+    renderMix();
+  });
+  document.querySelectorAll("[data-mix-share]").forEach(inp => inp.onchange = () => {
+    const pctv = parseNum(inp.value) / 100;
+    if (!mix.total) { toast("총 예산을 먼저 입력하세요"); renderMix(); return; }
+    mix.amounts[inp.dataset.mixShare] = Math.round(mix.total * pctv);
+    renderMix();
+  });
+
+  // 총 예산과 배분 합계가 어긋나면 바로 보여 준다
+  const gap = mix.total - sum;
+  $("#mix-status").innerHTML = !mix.total
+    ? `<span class="neutral">총 예산을 입력하세요</span>`
+    : gap === 0
+      ? `<span class="up-good">배분 완료 · ${num(sum)}원</span>`
+      : `<span class="down-bad">${gap > 0 ? "미배분" : "초과"} ${num(Math.abs(gap))}원</span>`;
+
+  const shown = rows.filter(r => r.amt > 0).sort((a, b) => b.amt - a.amt);
+  barsH($("#plan-plot"), {
+    rows: shown.map(r => ({ label: r.name, value: r.amt, color: r.color, share: r.share })),
+    note: r => ` (${(r.share * 100).toFixed(0)}%)`,
+    empty: "아직 배분한 예산이 없습니다.",
+  });
+
+  const saved = BUDGET.filter(r => r.b === mix.brand)
+    .sort((a, b) => (a.m === b.m ? 0 : a.m < b.m ? 1 : -1));
+  simpleTable($("#mix-saved"),
+    [["월", r => r.m], ["매체", r => platKo(r.p)], ["예산", r => num(r.amt)]], saved);
+}
+
+$("#mix-brand").onchange = e => { mix.brand = e.target.value; loadMix(); render(); };
+$("#mix-month").onchange = e => { mix.month = e.target.value; loadMix(); render(); };
+$("#mix-total").onchange = e => {
+  const next = parseNum(e.target.value);
+  const sum = mixSum();
+  // 이미 배분해 둔 게 있으면 비중을 유지한 채 총액만 늘리고 줄인다
+  if (sum > 0) PLATFORMS.forEach(p => {
+    if (mix.amounts[p.code]) mix.amounts[p.code] = Math.round(mix.amounts[p.code] / sum * next);
+  });
+  mix.total = next;
+  setTotalInput(next);
+  renderMix();
+};
+$("#mix-even").onclick = () => {
+  if (!mix.total) return toast("총 예산을 먼저 입력하세요");
+  const on = PLATFORMS.filter(p => state.channels.has(p.code));
+  const each = Math.round(mix.total / on.length);
+  mix.amounts = {};
+  on.forEach(p => (mix.amounts[p.code] = each));
+  renderMix();
+};
+$("#mix-prev").onclick = () => {
+  if (!mix.total) return toast("총 예산을 먼저 입력하세요");
+  const spend = prevSpend();
+  const base = Object.values(spend).reduce((a, b) => a + b, 0);
+  if (!base) return toast(`${prevMonth(mix.month)} 집행 데이터가 없습니다`);
+  mix.amounts = {};
+  Object.entries(spend).forEach(([code, v]) => (mix.amounts[code] = Math.round(mix.total * v / base)));
+  renderMix();
+};
+$("#mix-save").onclick = async () => {
+  const rows = PLATFORMS
+    .filter(p => (mix.amounts[p.code] || 0) > 0)
+    .map(p => ({ m: mix.month, b: mix.brand, p: p.code, amt: mix.amounts[p.code] }));
+  if (!rows.length) return toast("배분된 예산이 없습니다");
+  const btn = $("#mix-save");
+  btn.disabled = true;
+  try {
+    if (SB) await sbUpsert("budgets", rows.map(SHEETS.budget.toRow), SHEETS.budget.conflict);
+    // 메모리에도 같은 키 기준으로 반영한다
+    for (const r of rows) {
+      const hit = BUDGET.find(x => x.m === r.m && x.b === r.b && x.p === r.p);
+      if (hit) hit.amt = r.amt; else BUDGET.push(r);
+    }
+    toast(`${mix.month} ${brandKo(mix.brand)} 예산 ${rows.length}건 저장`);
+    render();
+  } catch (err) {
+    toast("저장 실패: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+};
+
 /* ══ 렌더 디스패치 ════════════════════════════════════════════ */
 function render() {
-  const brandKo = B_BY[state.brand].ko;
+  const curBrandKo = brandKo(state.brand);
   $("#page-sub").textContent =
-    state.page === "input" ? `${state.from} ~ ${state.to} · 입력 대상 ${SHEETS[state.sheet].title}`
+    state.page === "mix" ? `${mix.month} · ${brandKo(mix.brand)}`
+      : state.page === "input" ? `${state.from} ~ ${state.to} · 입력 대상 ${SHEETS[state.sheet].title}`
       : state.page === "exec" ? `${state.from} ~ ${state.to} · 사업 ${state.brands.size}개`
-      : `${state.from} ~ ${state.to} · ${brandKo} · 매체 ${state.channels.size}개`;
+      : `${state.from} ~ ${state.to} · ${curBrandKo} · 매체 ${state.channels.size}개`;
+
+  // 미디어 믹스는 자체 사업·월 선택을 쓰므로 공용 필터 바를 감춘다
+  $("#filters").classList.toggle("hide", state.page === "mix");
 
   // 필터 바 구성은 페이지마다 다르다
   const isExec = state.page === "exec", isAds = state.page === "ads";
@@ -1410,10 +1684,12 @@ function render() {
   $("#ch-label").classList.toggle("hide", !isAds);
   $("#channel-chips").classList.toggle("hide", !isAds);
 
-  $("#sheet-plats").classList.toggle("hide", state.sheet !== "ads");
+  // 매체 탭은 광고 실적·월별 예산 시트에서만 쓴다
+  $("#sheet-plats").classList.toggle("hide", state.sheet === "biz");
 
   if (isExec) renderExec();
   else if (isAds) renderAds();
+  else if (state.page === "mix") renderMix();
   else buildSheet();
 }
 
@@ -1423,11 +1699,23 @@ const MAP_IN = {
   ad: r => ({ d: r.date, b: r.brand, p: r.platform, imp: +r.impressions, clk: +r.clicks,
               cost: +r.adcost, cv: +r.conversions, rev: +r.conv_value }),
   biz: r => ({ d: r.date, b: r.brand, su: +r.signups, od: +r.orders, rv: +r.revenue }),
-  budget: r => ({ m: String(r.month).slice(0, 7), b: r.brand, amt: +r.amount }),
+  budget: r => ({ m: String(r.month).slice(0, 7), b: r.brand, p: r.platform, amt: +r.amount }),
 };
 
 async function loadData() {
   if (!SB) return;
+  const [br, pl] = await Promise.all([
+    sbSelect("brands", "select=*&order=sort.asc"),
+    sbSelect("platforms", "select=*&order=sort.asc"),
+  ]);
+  if (br.length) replaceAll(BRANDS, br.map(r => ({ code: r.code, ko: r.name_ko })));
+  if (pl.length) replaceAll(PLATFORMS, pl.map(r => ({ code: r.code, ko: r.name_ko })));
+  reindexMaster();
+  state.brands = new Set(BRANDS.map(b => b.code));
+  state.channels = new Set(PLATFORMS.map(p => p.code));
+  if (!P_BY[state.detail]) state.detail = PLATFORMS[0]?.code || "";
+  if (!B_BY[state.brand]) state.brand = BRANDS[0]?.code || "";
+
   const [ad, biz, bud] = await Promise.all([
     sbSelect("ad_daily", "select=*&order=date.asc&limit=100000"),
     sbSelect("business_daily", "select=*&order=date.asc&limit=100000"),
@@ -1488,7 +1776,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   state.page = b.dataset.page;
   document.querySelectorAll("nav button").forEach(x => x.removeAttribute("aria-current"));
   b.setAttribute("aria-current", "page");
-  for (const p of ["exec", "ads", "input"]) $("#page-" + p).hidden = p !== state.page;
+  for (const p of ["exec", "ads", "mix", "input"]) $("#page-" + p).hidden = p !== state.page;
   $("#page-title").textContent = b.childNodes[0].textContent.trim();
   render();
 });
@@ -1593,8 +1881,8 @@ $("#tpl-download").onclick = () => {
   const sample = (offset) => cfg.cols.map(c => {
     if (c.k === "d") return shiftDate(state.to, -offset);
     if (c.k === "m") return state.to.slice(0, 7);
-    if (c.k === "b") return B_BY[brand].ko;
-    if (c.k === "p") return P_BY[plat].ko;
+    if (c.k === "b") return brandKo(brand);
+    if (c.k === "p") return platKo(plat);
     return "";
   });
   const esc = v => (/[",\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v);
@@ -1630,15 +1918,71 @@ $("#dropzone").onclick = () => {
 let rt;
 addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (!$("#app").hidden) render(); }, 150); });
 
-/* ══ 부팅 ═════════════════════════════════════════════════════ */
-function boot() {
-  $("#date-from").min = $("#date-to").min = MIN_DATE;
-  $("#date-from").max = $("#date-to").max = MAX_DATE;
-  setPreset(30);
+/* ══ 사업 · 매체 추가 ═════════════════════════════════════════ */
+let modalKind = "brand";
 
+function openMaster(kind) {
+  modalKind = kind;
+  const isBrand = kind === "brand";
+  $("#modal-title").textContent = isBrand ? "사업 추가" : "매체 추가";
+  $("#m-ko-label").textContent = isBrand ? "사업명" : "매체명";
+  $("#m-ko").placeholder = isBrand ? "예: 내일하이" : "예: 카카오 모먼트";
+  $("#m-code").placeholder = isBrand ? "예: Learnershigh" : "예: Kakao_moment";
+  $("#m-channel-wrap").hidden = isBrand;
+  $("#m-ko").value = $("#m-code").value = $("#m-channel").value = "";
+  $("#modal-err").textContent = "";
+  $("#modal").hidden = false;
+  $("#m-ko").focus();
+}
+const closeMaster = () => { $("#modal").hidden = true; };
+
+async function addMaster(kind, code, ko, channel) {
+  const dup = kind === "brand" ? B_BY[code] : P_BY[code];
+  if (dup) throw new Error(`이미 등록된 코드입니다 (${dup.ko}).`);
+  if (kind === "brand") {
+    if (SB) await sbUpsert("brands", [{ code, name_ko: ko, sort: BRANDS.length + 1 }], "code");
+    BRANDS.push({ code, ko });
+    state.brands.add(code);
+  } else {
+    if (SB) await sbUpsert("platforms",
+      [{ code, name_ko: ko, channel: channel || null, sort: PLATFORMS.length + 1 }], "code");
+    PLATFORMS.push({ code, ko });
+    state.channels.add(code);
+  }
+  reindexMaster();
+  buildFilters();
+}
+
+$("#modal-cancel").onclick = closeMaster;
+$("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeMaster(); });
+addEventListener("keydown", e => { if (e.key === "Escape" && !$("#modal").hidden) closeMaster(); });
+$("#modal-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const code = $("#m-code").value.trim(), ko = $("#m-ko").value.trim();
+  $("#modal-err").textContent = "";
+  if (!/^[A-Za-z0-9_]+$/.test(code)) {
+    $("#modal-err").textContent = "코드는 영문·숫자·밑줄만 쓸 수 있습니다.";
+    return;
+  }
+  const btn = $("#modal-ok");
+  btn.disabled = true;
+  try {
+    await addMaster(modalKind, code, ko, $("#m-channel").value.trim());
+    closeMaster();
+    toast(`${modalKind === "brand" ? "사업" : "매체"} '${ko}' 추가`);
+    render();
+  } catch (err) {
+    $("#modal-err").textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ══ 필터·탭 다시 그리기 (사업·매체가 늘어나면 호출) ══════════ */
+function buildFilters() {
   $("#brand-chips").innerHTML = BRANDS.map(b =>
-    `<button class="chip ent" data-brand="${b.code}" aria-pressed="true">
-       <span class="swatch" style="background:var(--series-${b.slot})"></span>${b.ko}</button>`).join(" ");
+    `<button class="chip ent" data-brand="${b.code}" aria-pressed="${state.brands.has(b.code)}">
+       <span class="swatch" style="background:${slotCss(b.slot)}"></span>${b.ko}</button>`).join(" ");
   document.querySelectorAll("[data-brand]").forEach(b => b.onclick = () => {
     const c = b.dataset.brand;
     if (state.brands.has(c)) { if (state.brands.size === 1) return; state.brands.delete(c); }
@@ -1648,37 +1992,15 @@ function boot() {
   });
 
   const withAds = new Set(ADS.map(r => r.b));
+  if (!withAds.has(state.brand) && withAds.size) state.brand = [...withAds][0];
   $("#brand-select").innerHTML = BRANDS.map(b =>
-    `<option value="${b.code}"${b.code === state.brand ? " selected" : ""}${withAds.has(b.code) ? "" : " disabled"}>
-       ${b.ko}${withAds.has(b.code) ? "" : " (데이터 없음)"}</option>`).join("");
+    `<option value="${b.code}"${b.code === state.brand ? " selected" : ""}${withAds.has(b.code) ? "" : " disabled"}>`
+    + `${b.ko}${withAds.has(b.code) ? "" : " (데이터 없음)"}</option>`).join("");
   $("#brand-select").onchange = e => { state.brand = e.target.value; render(); };
 
-  // 데이터 입력: 사업을 먼저 고르고, 그 사업의 시트를 편집한다
-  $("#sheet-brands").innerHTML =
-    [["*", "전체 사업"]].concat(BRANDS.map(b => [b.code, b.ko]))
-      .map(([c, ko]) => `<button data-sb="${c}" aria-pressed="${c === state.sheetBrand}">${ko}</button>`).join("");
-  document.querySelectorAll("[data-sb]").forEach(b => b.onclick = () => {
-    if (!confirmDiscard()) return;
-    state.sheetBrand = b.dataset.sb;
-    document.querySelectorAll("[data-sb]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
-    render();
-  });
-
-  // 광고 실적은 매체별로 나눠서 올릴 수 있게 한다
-  $("#sheet-plats").innerHTML =
-    `<button data-sp="*" aria-pressed="true">전체 매체</button>` + PLATFORMS.map(p =>
-      `<button data-sp="${p.code}" aria-pressed="false">
-         <span class="swatch" style="background:var(--series-${p.slot})"></span>${p.ko}</button>`).join("");
-  document.querySelectorAll("[data-sp]").forEach(b => b.onclick = () => {
-    if (!confirmDiscard()) return;
-    state.sheetPlat = b.dataset.sp;
-    document.querySelectorAll("[data-sp]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
-    render();
-  });
-
   $("#channel-chips").innerHTML = PLATFORMS.map(p =>
-    `<button class="chip ent" data-ch="${p.code}" aria-pressed="true">
-       <span class="swatch" style="background:var(--series-${p.slot})"></span>${p.ko}</button>`).join(" ");
+    `<button class="chip ent" data-ch="${p.code}" aria-pressed="${state.channels.has(p.code)}">
+       <span class="swatch" style="background:${slotCss(p.slot)}"></span>${p.ko}</button>`).join(" ");
   document.querySelectorAll("[data-ch]").forEach(b => b.onclick = () => {
     const c = b.dataset.ch;
     if (state.channels.has(c)) { if (state.channels.size === 1) return; state.channels.delete(c); }
@@ -1686,6 +2008,48 @@ function boot() {
     b.setAttribute("aria-pressed", String(state.channels.has(c)));
     render();
   });
+
+  // 데이터 입력: 사업 → 매체 순으로 좁혀서 넣는다
+  $("#sheet-brands").innerHTML =
+    [["*", "전체 사업"]].concat(BRANDS.map(b => [b.code, b.ko]))
+      .map(([c, ko]) => `<button data-sb="${c}" aria-pressed="${c === state.sheetBrand}">${ko}</button>`).join("")
+    + `<button class="add-btn" id="add-brand">+ 사업 추가</button>`;
+  document.querySelectorAll("[data-sb]").forEach(b => b.onclick = () => {
+    if (!confirmDiscard()) return;
+    state.sheetBrand = b.dataset.sb;
+    document.querySelectorAll("[data-sb]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  });
+  $("#add-brand").onclick = () => openMaster("brand");
+
+  $("#sheet-plats").innerHTML =
+    `<button data-sp="*" aria-pressed="${state.sheetPlat === "*"}">전체 매체</button>`
+    + PLATFORMS.map(p =>
+      `<button data-sp="${p.code}" aria-pressed="${state.sheetPlat === p.code}">
+         <span class="swatch" style="background:${slotCss(p.slot)}"></span>${p.ko}</button>`).join("")
+    + `<button class="add-btn" id="add-plat">+ 매체 추가</button>`;
+  document.querySelectorAll("[data-sp]").forEach(b => b.onclick = () => {
+    if (!confirmDiscard()) return;
+    state.sheetPlat = b.dataset.sp;
+    document.querySelectorAll("[data-sp]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  });
+  $("#add-plat").onclick = () => openMaster("platform");
+
+  $("#mix-brand").innerHTML = BRANDS.map(b =>
+    `<option value="${b.code}"${b.code === mix.brand ? " selected" : ""}>${b.ko}</option>`).join("");
+}
+
+/* ══ 부팅 ═════════════════════════════════════════════════════ */
+function boot() {
+  $("#date-from").min = $("#date-to").min = MIN_DATE;
+  $("#date-from").max = $("#date-to").max = MAX_DATE;
+  setPreset(30);
+  if (!mix.brand) mix.brand = BRANDS[0].code;
+  if (!mix.month) mix.month = MAX_DATE.slice(0, 7);
+  $("#mix-month").value = mix.month;
+  $("#mix-month").setAttribute("value", mix.month);
+  buildFilters();
 
   simpleTable($("#log-table"), [["일시", r => r[0]], ["파일", r => r[1]], ["행", r => r[2]], ["사용자", r => r[3]]], [
     ["2026-09-16 09:12", "Ads RAW Data.xlsx", "911", "marketing@"],
