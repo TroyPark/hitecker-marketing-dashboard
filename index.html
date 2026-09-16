@@ -1845,6 +1845,8 @@ $("#login-form").addEventListener("submit", async e => {
 });
 $("#logout").onclick = () => {
   sbSignOut();
+  gotoPage("exec");            // 잠긴 구역을 열어 둔 채로 나가지 않는다
+  $("#pw").value = "";
   $("#app").hidden = true;
   $("#login").hidden = false;
 };
@@ -1858,15 +1860,9 @@ $("#theme-toggle").onclick = () => {
 /* ══ 구역 잠금 ════════════════════════════════════════════════
    미디어 믹스·데이터 입력은 별도 비밀번호를 받는다.
    대조는 Supabase 함수 안에서 하고, 해시도 비밀번호도 브라우저로 내려오지 않는다.
-   통과 여부는 탭을 닫으면 사라진다(sessionStorage). */
+   해제 상태를 기억하지 않는다 — 다른 메뉴로 나갔다 오면 다시 묻는다. */
 const LOCKED = { mix: "미디어 믹스", input: "데이터 입력" };
-const UNLOCK_KEY = "ht_unlocked";
-const unlocked = new Set(JSON.parse(sessionStorage.getItem(UNLOCK_KEY) || "[]"));
-const rememberUnlock = p => {
-  unlocked.add(p);
-  sessionStorage.setItem(UNLOCK_KEY, JSON.stringify([...unlocked]));
-  document.querySelectorAll(`nav button[data-page="${p}"] .lock-ico`).forEach(x => x.remove());
-};
+sessionStorage.removeItem("ht_unlocked");   // 예전 버전이 남긴 값 정리
 
 function askSectionPassword(page) {
   return new Promise(resolve => {
@@ -1893,7 +1889,7 @@ function askSectionPassword(page) {
           method: "POST",
           body: JSON.stringify({ p_section: page, p_password: $("#lock-pw").value }),
         });
-        if (ok === true) { rememberUnlock(page); close(true); }
+        if (ok === true) close(true);
         else { $("#lock-err").textContent = "비밀번호가 맞지 않습니다."; $("#lock-pw").select(); }
       } catch (err) {
         $("#lock-err").textContent = /Could not find the function/.test(err.message)
@@ -1929,10 +1925,9 @@ function gotoPage(page) {
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = async () => {
   const page = b.dataset.page;
+  if (page === state.page) return;              // 이미 보고 있으면 다시 묻지 않는다
   // Supabase 없이 로컬 데이터로 볼 때는 대조할 곳이 없으니 잠그지 않는다
-  if (LOCKED[page] && SB && !unlocked.has(page)) {
-    if (!await askSectionPassword(page)) return;
-  }
+  if (LOCKED[page] && SB && !await askSectionPassword(page)) return;
   gotoPage(page);
 });
 
@@ -2253,7 +2248,6 @@ function boot() {
   setPreset(30);
   // 로컬 데이터 모드에서는 대조할 서버가 없어 잠금을 쓰지 않는다
   if (!SB) document.querySelectorAll(".lock-ico").forEach(x => x.remove());
-  else unlocked.forEach(p => document.querySelectorAll(`nav button[data-page="${p}"] .lock-ico`).forEach(x => x.remove()));
 
   if (!mix.brand) mix.brand = BRANDS[0].code;
   if (!mix.month) mix.month = MAX_DATE.slice(0, 7);
