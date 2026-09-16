@@ -1,0 +1,24 @@
+# 비밀값 — 절대 커밋 금지
+.env
+.env.*
+!.env.example
+# gitignore 는 줄 끝 주석을 패턴의 일부로 읽는다. 주석은 반드시 별도 줄에.
+# config.js 는 CI가 만들고, config.local.js 는 로컬 개발용 키다.
+config.js
+config.local.js
+
+# 원천 데이터 (사내 자산)
+*.xlsx
+~$*
+prototype_data.json
+
+# 프로토타입 목업 데이터 — 실서비스에는 올리지 않는다
+data.js
+
+# 작업 산출물
+_*.py
+_tmp_*
+shot*.png
+__pycache__/
+.venv/
+.claude/

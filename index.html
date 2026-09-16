@@ -1,0 +1,1714 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>하이테커 마케팅 대시보드 · 프로토타입</title>
+<style>
+/* ── 디자인 토큰 ─────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --surface-1:      #fcfcfb;
+  --plane:          #f9f9f7;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --grid:           #e1e0d9;
+  --axis:           #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+  --success-text:   #006300;
+
+  /* 로고에서 가져온 브랜드 토큰 — UI 크롬에만 쓴다 (데이터 마크에는 쓰지 않음) */
+  --brand-ink:      #231815;
+  --brand-accent:   #ff4500;
+
+  --series-1: #2a78d6;  --series-2: #eb6834;  --series-3: #1baf7a;  --series-4: #eda100;
+  --series-5: #008300;  --series-6: #e87ba4;  --series-7: #4a3aa7;  --series-8: #e34948;
+
+  --seq-250: #86b6ef;  --seq-400: #3987e5;  --seq-550: #1c5cab;
+
+  --good: #0ca30c;  --warning: #fab219;  --serious: #ec835a;  --critical: #d03b3b;
+  --logo-filter: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;  --plane: #0d0d0d;
+    --text-primary: #ffffff;  --text-secondary: #c3c2b7;  --text-muted: #898781;
+    --grid: #2c2c2a;  --axis: #383835;  --border: rgba(255,255,255,0.10);
+    --success-text: #0ca30c;  --brand-ink: #f2efee;
+    --series-1: #3987e5;  --series-2: #d95926;  --series-3: #199e70;  --series-4: #c98500;
+    --series-5: #008300;  --series-6: #d55181;  --series-7: #9085e9;  --series-8: #e66767;
+    --logo-filter: brightness(0) invert(1);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;  --plane: #0d0d0d;
+  --text-primary: #ffffff;  --text-secondary: #c3c2b7;  --text-muted: #898781;
+  --grid: #2c2c2a;  --axis: #383835;  --border: rgba(255,255,255,0.10);
+  --success-text: #0ca30c;  --brand-ink: #f2efee;
+  --series-1: #3987e5;  --series-2: #d95926;  --series-3: #199e70;  --series-4: #c98500;
+  --series-5: #008300;  --series-6: #d55181;  --series-7: #9085e9;  --series-8: #e66767;
+  --logo-filter: brightness(0) invert(1);
+}
+
+* { box-sizing: border-box; }
+/* display를 지정한 요소는 UA의 [hidden]{display:none}이 덮여버린다 — 되돌려 놓는다 */
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--plane); color: var(--text-primary);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+.hide { display: none !important; }
+
+/* ── 로그인 ──────────────────────────────────────────────────── */
+#login { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.login-card {
+  width: 100%; max-width: 392px; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 14px; padding: 30px 28px;
+}
+.login-card img { height: 26px; filter: var(--logo-filter); margin-bottom: 20px; }
+.login-card h1 { margin: 0 0 4px; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+.login-card .sub { margin: 0 0 22px; color: var(--text-secondary); font-size: 13px; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.field input {
+  width: 100%; padding: 9px 11px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--plane);
+}
+.field input:focus { outline: 2px solid var(--brand-accent); outline-offset: -1px; }
+.btn-primary {
+  width: 100%; padding: 10px; margin-top: 8px; border: 0; border-radius: 8px;
+  background: var(--brand-ink); color: var(--surface-1); font-weight: 600; cursor: pointer;
+}
+.btn-primary:hover { filter: brightness(1.15); }
+.login-note {
+  margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--text-muted); line-height: 1.65;
+}
+.login-note code { background: var(--plane); padding: 1px 5px; border-radius: 4px; }
+
+/* ── 앱 셸 ───────────────────────────────────────────────────── */
+#app { display: grid; grid-template-columns: 216px 1fr; min-height: 100vh; }
+aside {
+  background: var(--surface-1); border-right: 1px solid var(--border);
+  padding: 22px 12px 14px; display: flex; flex-direction: column; gap: 3px;
+}
+.brandmark { padding: 0 10px 22px; }
+.brandmark img { height: 20px; display: block; filter: var(--logo-filter); }
+.brandmark span { display: block; font-size: 11px; color: var(--text-muted); margin-top: 7px; }
+nav button {
+  position: relative; display: block; width: 100%; text-align: left;
+  padding: 9px 10px 9px 14px; border: 0; border-radius: 7px;
+  background: none; color: var(--text-secondary); cursor: pointer;
+}
+nav button small { display: block; font-size: 11px; color: var(--text-muted); font-weight: 400; }
+nav button:hover { background: var(--plane); }
+nav button[aria-current="page"] { background: var(--plane); color: var(--text-primary); font-weight: 600; }
+nav button[aria-current="page"]::before {
+  content: ""; position: absolute; left: 3px; top: 9px; bottom: 9px;
+  width: 3px; border-radius: 2px; background: var(--brand-accent);
+}
+.side-foot { margin-top: auto; padding: 12px 10px 0; font-size: 12px; color: var(--text-muted);
+             border-top: 1px solid var(--border); }
+.side-foot .who { color: var(--text-secondary); }
+.side-foot button {
+  border: 1px solid var(--border); background: none; border-radius: 6px;
+  padding: 4px 9px; cursor: pointer; font-size: 12px; margin: 8px 4px 0 0;
+}
+
+main { padding: 22px 26px 56px; max-width: 1480px; }
+.page-head { display: flex; align-items: baseline; gap: 12px; }
+.page-head h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+.page-head .sub { color: var(--text-muted); font-size: 13px; }
+
+/* ── 필터 바 ─────────────────────────────────────────────────── */
+.filters {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 16px 0 16px; padding: 10px 12px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+}
+.filters .sep { width: 1px; height: 20px; background: var(--border); margin: 0 3px; }
+.filters label.inline { font-size: 12px; color: var(--text-muted); }
+.chip {
+  padding: 5px 11px; border-radius: 99px; border: 1px solid var(--border);
+  background: none; color: var(--text-secondary); cursor: pointer; font-size: 12.5px;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px;
+}
+.chip:hover { background: var(--plane); }
+.chip[aria-pressed="true"] { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
+.chip .swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.chip.ent[aria-pressed="true"] { background: var(--plane); color: var(--text-primary); border-color: var(--axis); font-weight: 600; }
+.chip.ent[aria-pressed="false"] .swatch { opacity: 0.25; }
+.chip:disabled { opacity: 0.4; cursor: not-allowed; }
+select, input[type="date"] {
+  padding: 5px 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--plane);
+}
+input[type="date"] { font-variant-numeric: tabular-nums; }
+
+/* ── 배너 / 노트 ─────────────────────────────────────────────── */
+.banner {
+  display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; line-height: 1.6;
+  color: var(--text-secondary); background: var(--surface-1);
+  border: 1px solid var(--border); border-left: 3px solid var(--warning);
+  border-radius: 8px; padding: 10px 13px; margin-bottom: 14px;
+}
+.banner b { color: var(--text-primary); }
+
+/* ── 스탯 타일 ───────────────────────────────────────────────── */
+.tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 12px; }
+.tiles.five { grid-template-columns: repeat(5, 1fr); }
+.tile {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 13px 15px 11px;
+}
+.tile .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; }
+.tile .value { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
+.tile .value small { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-left: 2px; }
+.tile .delta { margin-top: 5px; font-size: 11.5px; color: var(--text-muted); }
+.tile .delta b { font-weight: 600; }
+.up-good  { color: var(--success-text); }
+.down-bad { color: var(--critical); }
+.neutral  { color: var(--text-muted); }
+
+/* ── 카드 / 차트 ─────────────────────────────────────────────── */
+.grid2 { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; margin-bottom: 12px; align-items: start; }
+.grid2.even { grid-template-columns: 1fr 1fr; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 15px 17px 13px; margin-bottom: 12px;
+}
+.grid2 .card { margin-bottom: 0; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.card-head h3 { margin: 0; font-size: 14px; font-weight: 620; }
+.card-head .cap { margin: 2px 0 0; font-size: 12px; color: var(--text-muted); }
+.card-head .tools { display: flex; gap: 8px; flex: none; }
+.toggle-table {
+  border: 1px solid var(--border); background: none; border-radius: 6px;
+  padding: 3px 9px; font-size: 11.5px; color: var(--text-secondary); cursor: pointer;
+}
+.toggle-table:hover { background: var(--plane); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 2px; font-size: 12px; color: var(--text-secondary); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.plot { position: relative; }
+.plot svg { display: block; width: 100%; }
+.empty { padding: 26px 0; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+/* ── 툴팁 ────────────────────────────────────────────────────── */
+.tip {
+  position: absolute; pointer-events: none; z-index: 5; opacity: 0; transition: opacity .08s;
+  background: var(--surface-1); border: 1px solid var(--axis); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.14); min-width: 158px;
+}
+.tip .t-date { color: var(--text-muted); margin-bottom: 5px; font-size: 11.5px; }
+.tip .t-row { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
+.tip .t-row b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.tip .t-name { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); }
+.tip i { width: 9px; height: 9px; border-radius: 2px; flex: none; display: inline-block; }
+
+/* ── 테이블 ──────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  font-size: 11.5px; font-weight: 600; color: var(--text-secondary);
+  border-bottom: 1px solid var(--axis); user-select: none;
+}
+thead th.sortable { cursor: pointer; }
+thead th.sortable:hover { color: var(--text-primary); }
+tbody tr { border-bottom: 1px solid var(--grid); }
+tbody tr:last-child { border-bottom: 0; }
+tbody tr.total { border-top: 1px solid var(--axis); font-weight: 600; }
+td { font-variant-numeric: tabular-nums; }
+.cell-name { display: inline-flex; align-items: center; gap: 8px; }
+.cell-name i { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+  padding: 1px 7px 1px 5px; border-radius: 99px; border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.badge i { font-style: normal; font-size: 10px; }
+.table-view { display: none; margin-top: 10px; max-height: 300px; overflow: auto; }
+.table-view.on { display: block; }
+
+/* ── 미터 (예산 소진) ────────────────────────────────────────── */
+.meter { margin: 12px 0 0; }
+.meter:first-of-type { margin-top: 8px; }
+.meter .m-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; margin-bottom: 5px; }
+.meter .m-top .r { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.meter .track { height: 10px; border-radius: 5px; background: var(--grid); overflow: hidden; }
+.meter .fill { height: 100%; border-radius: 5px; }
+
+/* ── 스프레드시트 ────────────────────────────────────────────── */
+.sheet-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.sheet-tabs button {
+  border: 1px solid var(--border); background: var(--surface-1); border-radius: 8px;
+  padding: 7px 14px; cursor: pointer; font-size: 13px; color: var(--text-secondary);
+}
+.sheet-tabs button[aria-pressed="true"] {
+  background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); font-weight: 600;
+}
+.sheet-tabs.small { flex-wrap: wrap; }
+.sheet-tabs.small button { padding: 5px 11px; font-size: 12.5px; border-radius: 99px; }
+.sheet-tabs.small button[aria-pressed="true"] {
+  background: var(--plane); color: var(--text-primary); border-color: var(--axis);
+}
+.sheet-tabs.small .swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 6px; }
+.sheet-wrap { overflow: auto; max-height: 460px; border: 1px solid var(--border); border-radius: 8px; }
+table.sheet { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+table.sheet th {
+  position: sticky; top: 0; z-index: 2; background: var(--plane);
+  border-bottom: 1px solid var(--axis); border-right: 1px solid var(--grid);
+  padding: 7px 10px; text-align: right; font-size: 11.5px;
+}
+table.sheet th:first-child, table.sheet td:first-child { text-align: left; }
+table.sheet th.rowno, table.sheet td.rowno {
+  position: sticky; left: 0; z-index: 1; background: var(--plane); color: var(--text-muted);
+  text-align: right; font-size: 11px; width: 44px; min-width: 44px;
+}
+table.sheet th.rowno { z-index: 3; }
+table.sheet td {
+  border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid);
+  padding: 6px 10px; outline: none; font-variant-numeric: tabular-nums;
+}
+table.sheet td.ro { color: var(--text-secondary); background: var(--plane); }
+table.sheet td.sel { box-shadow: inset 0 0 0 2px var(--brand-accent); }
+table.sheet td.dirty { background: color-mix(in srgb, var(--warning) 16%, transparent); }
+table.sheet td input {
+  width: 100%; border: 0; padding: 0; margin: 0; background: transparent;
+  text-align: right; outline: none; font-variant-numeric: tabular-nums;
+}
+table.sheet tr.newrow td { background: color-mix(in srgb, var(--good) 8%, transparent); }
+.sheet-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+.sheet-bar .grow { flex: 1; }
+
+/* ── 버튼 / 업로드 ───────────────────────────────────────────── */
+.btn {
+  border: 1px solid var(--border); background: var(--surface-1); border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px;
+}
+.btn:hover { background: var(--plane); }
+.btn.solid { background: var(--brand-ink); color: var(--surface-1); border-color: transparent; font-weight: 600; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.dropzone {
+  border: 1.5px dashed var(--axis); border-radius: 10px; padding: 22px; text-align: center;
+  color: var(--text-secondary); background: var(--plane); cursor: pointer;
+}
+.dropzone:hover { border-color: var(--brand-accent); color: var(--text-primary); }
+.dropzone strong { display: block; margin-bottom: 4px; color: var(--text-primary); font-size: 14px; }
+.dropzone span { font-size: 12px; color: var(--text-muted); }
+pre.sql {
+  background: var(--plane); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px 16px; overflow-x: auto; font-size: 12px; line-height: 1.55;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text-secondary);
+}
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(12px);
+  background: var(--text-primary); color: var(--surface-1); padding: 9px 16px;
+  border-radius: 8px; font-size: 13px; opacity: 0; transition: .18s; pointer-events: none; z-index: 40;
+}
+.toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 1180px) {
+  .tiles, .tiles.five { grid-template-columns: repeat(3, 1fr); }
+  .grid2, .grid2.even { grid-template-columns: 1fr; }
+  #app { grid-template-columns: 1fr; }
+  aside { flex-direction: row; align-items: center; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .brandmark, .side-foot { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══ 로그인 ═══════════════════════════════════════════════════ -->
+<div id="login">
+  <form class="login-card" id="login-form">
+    <img src="Logo.png" alt="HIGH-TECHER">
+    <h1>마케팅 대시보드</h1>
+    <p class="sub">광고 · 사업 성과</p>
+    <div class="field">
+      <label for="email">이메일</label>
+      <input id="email" type="email" value="marketing@hitecker.co.kr" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="pw">비밀번호</label>
+      <input id="pw" type="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn-primary" type="submit">로그인</button>
+    <p class="login-note">계정은 관리자가 발급합니다.</p>
+  </form>
+</div>
+
+<!-- ══ 앱 ═══════════════════════════════════════════════════════ -->
+<div id="app" hidden>
+  <aside>
+    <div class="brandmark">
+      <img src="Logo.png" alt="HIGH-TECHER">
+      <span>Marketing Dashboard</span>
+    </div>
+    <nav>
+      <button data-page="exec" aria-current="page">경영 대시보드</button>
+      <button data-page="ads">광고 운영</button>
+      <button data-page="input">데이터 입력</button>
+    </nav>
+    <div class="side-foot">
+      <span class="who">marketing@hitecker.co.kr</span><br>역할: admin
+      <div><button id="theme-toggle">테마 전환</button><button id="logout">로그아웃</button></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="page-head">
+      <h2 id="page-title">경영 대시보드</h2>
+      <span class="sub" id="page-sub"></span>
+    </div>
+
+    <!-- 필터 바: 페이지가 스코프하는 모든 카드 위에 한 줄 -->
+    <div class="filters" id="filters">
+      <label class="inline">기간</label>
+      <button class="chip" data-range="7">최근 7일</button>
+      <button class="chip" data-range="30" aria-pressed="true">최근 30일</button>
+      <button class="chip" data-range="90">최근 90일</button>
+      <button class="chip" data-range="mtd">이번 달</button>
+      <button class="chip" data-range="0">전체</button>
+      <input type="date" id="date-from"> <span style="color:var(--text-muted)">~</span> <input type="date" id="date-to">
+      <span class="sep"></span>
+      <label class="inline" id="brand-label">사업</label>
+      <span id="brand-chips"></span>
+      <select id="brand-select" class="hide"></select>
+      <span class="sep" id="ch-sep"></span>
+      <label class="inline" id="ch-label">매체</label>
+      <span id="channel-chips"></span>
+    </div>
+
+    <!-- ══ 경영 대시보드 ══════════════════════════════════════ -->
+    <section id="page-exec">
+      <div class="tiles" id="exec-tiles"></div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head">
+            <div><h3>사업별 일별 매출</h3></div>
+            <div class="tools"><button class="toggle-table" data-tt="rev">표로 보기</button></div>
+          </div>
+          <div class="legend" id="rev-legend"></div>
+          <div class="plot" id="rev-plot"></div>
+          <div class="table-view" id="rev-table"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div><h3>사업별 매출</h3><p class="cap">괄호는 ROAS</p></div>
+            <div class="tools"><button class="toggle-table" data-tt="brev">표로 보기</button></div>
+          </div>
+          <div class="plot" id="brev-plot"></div>
+          <div class="table-view" id="brev-table"></div>
+        </div>
+      </div>
+
+      <div class="grid2 even">
+        <div class="card">
+          <div class="card-head"><div>
+            <h3>예산 소진</h3><p class="cap">월 예산을 선택 기간 일수만큼 일할 계산</p>
+          </div></div>
+          <div id="budget-meters"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>유입 → 가입 → 결제</h3></div></div>
+          <div class="plot" id="exec-funnel"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div>
+          <h3>사업별 성과</h3>
+          <p class="cap">ROAS = 매출 ÷ 광고비 · CAC = 광고비 ÷ 결제수</p>
+        </div></div>
+        <div style="overflow-x:auto"><table id="exec-table"></table></div>
+      </div>
+    </section>
+
+    <!-- ══ 광고 운영 ══════════════════════════════════════════ -->
+    <section id="page-ads" hidden>
+      <div class="tiles five" id="ads-tiles"></div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head">
+            <div><h3>일별 광고비 · 전환매출</h3></div>
+            <div class="tools"><button class="toggle-table" data-tt="trend">표로 보기</button></div>
+          </div>
+          <div class="legend" id="trend-legend"></div>
+          <div class="plot" id="trend-plot"></div>
+          <div class="table-view" id="trend-table"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div><h3>매체별 광고비</h3><p class="cap">괄호는 비중</p></div>
+            <div class="tools"><button class="toggle-table" data-tt="mix">표로 보기</button></div>
+          </div>
+          <div class="plot" id="mix-plot"></div>
+          <div class="table-view" id="mix-table"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div><h3>매체별 성과</h3></div></div>
+        <div style="overflow-x:auto"><table id="perf-table"></table></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><h3 id="detail-title">매체 상세</h3></div>
+          <div class="tools"><select id="detail-select"></select></div>
+        </div>
+        <div class="legend" id="detail-legend"></div>
+        <div class="plot" id="detail-plot"></div>
+      </div>
+
+      <div class="grid2 even">
+        <div class="card">
+          <div class="card-head"><div><h3>전환 퍼널</h3></div></div>
+          <div class="plot" id="funnel-plot"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>지표 요약</h3></div></div>
+          <table id="detail-table"></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 데이터 입력 ════════════════════════════════════════ -->
+    <section id="page-input" hidden>
+      <div class="sheet-tabs" id="sheet-brands"></div>
+      <div class="sheet-tabs" id="sheet-tabs">
+        <button data-sheet="ads" aria-pressed="true">광고 실적</button>
+        <button data-sheet="biz">사업 실적 (가입 · 결제 · 매출)</button>
+        <button data-sheet="budget">월별 예산</button>
+      </div>
+      <div class="sheet-tabs small" id="sheet-plats"></div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><h3 id="sheet-title">광고 실적</h3>
+            <p class="cap">방향키 이동 · Enter 편집 · Tab 다음 칸 · 엑셀 범위 Ctrl+V 붙여넣기</p></div>
+          <div class="tools">
+            <button class="btn" id="sheet-add">행 추가</button>
+            <button class="btn" id="sheet-reset" disabled>되돌리기</button>
+            <button class="btn solid" id="sheet-save" disabled>저장</button>
+          </div>
+        </div>
+        <div class="sheet-wrap"><table class="sheet" id="sheet"></table></div>
+        <div class="sheet-bar">
+          <span id="sheet-count"></span>
+          <span class="grow"></span>
+          <span id="sheet-dirty"></span>
+        </div>
+      </div>
+
+      <div class="grid2 even">
+        <div class="card">
+          <div class="card-head">
+            <div><h3>엑셀 업로드</h3>
+              <p class="cap">양식이 없으면 먼저 템플릿을 받아 채워 오세요</p></div>
+            <div class="tools"><button class="btn" id="tpl-download">템플릿 받기</button></div>
+          </div>
+          <div class="dropzone" id="dropzone">
+            <strong>엑셀 파일을 여기에 놓거나 클릭해서 선택</strong>
+            <span>.xlsx · (RAW)사업명 시트 인식 · 73컬럼을 일자×매체 행으로 변환</span>
+          </div>
+          <div id="upload-preview" class="hide" style="margin-top:14px"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>업로드 이력</h3></div></div>
+          <table id="log-table"></table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- config.js 는 CI가, config.local.js 는 로컬 개발자가 만든다. 없으면 404 나고 무시된다.
+     data.js 는 Supabase 연결 전에 쓰는 로컬 데이터다. -->
+<script src="config.js"></script>
+<script src="config.local.js"></script>
+<script src="data.js"></script>
+<script>
+"use strict";
+
+/* ══ Supabase (REST 직접 호출 — SDK 없이 file:// 에서도 돈다) ═══ */
+const CFG = window.APP_CONFIG || {};
+const SB = CFG.SUPABASE_URL ? { url: CFG.SUPABASE_URL.replace(/\/$/, ""), key: CFG.SUPABASE_ANON_KEY, token: null } : null;
+const SESSION_KEY = "ht_dashboard_session";
+
+async function sbFetch(path, opts = {}) {
+  const r = await fetch(`${SB.url}${path}`, {
+    ...opts,
+    headers: {
+      apikey: SB.key,
+      ...(SB.token ? { Authorization: `Bearer ${SB.token}` } : {}),
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+    },
+  });
+  const text = await r.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!r.ok) {
+    const msg = body && (body.error_description || body.msg || body.message || body.hint);
+    throw new Error(msg || `${r.status} ${r.statusText}`);
+  }
+  return body;
+}
+
+function saveSession(j, email) {
+  SB.token = j.access_token;
+  localStorage.setItem(SESSION_KEY, JSON.stringify({
+    token: j.access_token, refresh: j.refresh_token, email,
+    exp: Date.now() + (j.expires_in || 3600) * 1000 - 60000,
+  }));
+}
+
+async function sbSignIn(email, password) {
+  const j = await sbFetch("/auth/v1/token?grant_type=password", {
+    method: "POST", body: JSON.stringify({ email, password }),
+  });
+  saveSession(j, email);
+  return j;
+}
+
+/** 저장된 세션이 살아 있으면 복구한다. 만료됐으면 refresh 로 갱신. */
+async function sbRestore() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  const s = JSON.parse(raw);
+  if (Date.now() < s.exp) { SB.token = s.token; return s; }
+  try {
+    const j = await sbFetch("/auth/v1/token?grant_type=refresh_token", {
+      method: "POST", body: JSON.stringify({ refresh_token: s.refresh }),
+    });
+    saveSession(j, s.email);
+    return { ...s, token: j.access_token };
+  } catch {
+    localStorage.removeItem(SESSION_KEY);
+    return null;
+  }
+}
+
+function sbSignOut() {
+  localStorage.removeItem(SESSION_KEY);
+  if (SB) SB.token = null;
+}
+
+const sbSelect = (table, qs) => sbFetch(`/rest/v1/${table}?${qs}`);
+const sbUpsert = (table, rows, onConflict) =>
+  sbFetch(`/rest/v1/${table}?on_conflict=${onConflict}`, {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(rows),
+  });
+
+/* ══ 마스터 (엑셀 SQL값 시트) ═════════════════════════════════ */
+const BRANDS = [
+  { code: "Learnershigh", ko: "내일하이", slot: 1 },
+  { code: "KFO",          ko: "KFO",     slot: 2 },
+  { code: "Oracle",       ko: "오라클",   slot: 3 },
+  { code: "Knewdeal",     ko: "K-뉴딜",   slot: 4 },
+];
+const PLATFORMS = [
+  { code: "Naver_brand",         ko: "네이버 브랜드검색",  slot: 1 },
+  { code: "Naver_sa",            ko: "네이버 파워링크",    slot: 2 },
+  { code: "Naver_powercontents", ko: "네이버 파워컨텐츠",  slot: 3 },
+  { code: "Google_SA",           ko: "구글 검색광고",      slot: 4 },
+  { code: "Google_display",      ko: "구글 디스플레이",    slot: 5 },
+  { code: "Meta_sponsored",      ko: "메타 스폰서드",      slot: 6 },
+  { code: "Google_demandGen",    ko: "구글 디멘드젠",      slot: 7 },
+  { code: "Google_pmax",         ko: "구글 P-Max",        slot: 8 },
+];
+const B_BY = Object.fromEntries(BRANDS.map(b => [b.code, b]));
+const P_BY = Object.fromEntries(PLATFORMS.map(p => [p.code, p]));
+
+/* 배열 자체는 계속 같은 객체를 쓴다 (SHEETS 가 참조를 들고 있다). 내용만 갈아끼운다. */
+const ADS = window.ADS_DATA || [];
+const BIZ = window.BIZ_DATA || [];
+const BUDGET = window.BUDGET_DATA || [];
+const replaceAll = (arr, rows) => { arr.length = 0; arr.push(...rows); };
+
+let MIN_DATE, MAX_DATE;
+function recomputeDates() {
+  const ds = [...new Set(ADS.map(r => r.d).concat(BIZ.map(r => r.d)))].sort();
+  const today = new Date().toISOString().slice(0, 10);
+  MIN_DATE = ds[0] || today;
+  MAX_DATE = ds[ds.length - 1] || today;
+}
+recomputeDates();
+
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const brandColor = c => cssVar("--series-" + B_BY[c].slot);
+const platColor  = c => cssVar("--series-" + P_BY[c].slot);
+
+/* ══ 상태 ═════════════════════════════════════════════════════ */
+const state = {
+  page: "exec",
+  from: "", to: "", preset: 30,
+  brands: new Set(BRANDS.map(b => b.code)),   // 경영 대시보드: 다중
+  brand: "Learnershigh",                      // 광고 운영: 단일
+  channels: new Set(PLATFORMS.map(p => p.code)),
+  sheetBrand: "*",                            // 데이터 입력: 전체 또는 단일
+  sheetPlat: "*",
+  detail: "Meta_sponsored",
+  execSort: { key: "rv", dir: -1 },
+  adsSort:  { key: "cost", dir: -1 },
+  sheet: "ads",
+};
+
+/* ══ 유틸 ═════════════════════════════════════════════════════ */
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, kids = []) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v;
+    else if (k === "html") n.innerHTML = v;
+    else if (k === "text") n.textContent = v;
+    else n.setAttribute(k, v);
+  }
+  for (const c of [].concat(kids)) n.append(c);
+  return n;
+};
+const num = n => (isFinite(n) ? Math.round(n).toLocaleString("ko-KR") : "–");
+const won = n => {
+  if (!isFinite(n)) return "–";
+  if (n === 0) return "0";
+  if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(1).replace(/\.0$/, "") + "억";
+  if (Math.abs(n) >= 1e4) return num(n / 1e4) + "만";
+  return num(n);
+};
+const pct = n => (isFinite(n) ? (n * 100).toFixed(n < 0.1 ? 2 : 1) + "%" : "–");
+const pct0 = n => (isFinite(n) ? Math.round(n * 100) + "%" : "–");
+const shiftDate = (iso, days) => {              // UTC 기준 — 로컬 자정은 KST에서 하루 밀린다
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+const daysBetween = (a, b) =>
+  Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000) + 1;
+const mmdd = iso => iso.slice(5).replace("-", "/");
+const clampDate = d => (d < MIN_DATE ? MIN_DATE : d > MAX_DATE ? MAX_DATE : d);
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove("on"), 2400);
+}
+
+/* 파생지표는 반드시 합계에서 재계산한다 — 일별 값을 평균내면 틀린다 */
+const zero = () => ({ imp: 0, clk: 0, cost: 0, cv: 0, rev: 0, su: 0, od: 0, rvz: 0, budget: 0 });
+function addAd(a, r) { a.imp += r.imp; a.clk += r.clk; a.cost += r.cost; a.cv += r.cv; a.rev += r.rev; return a; }
+function addBiz(a, r) { a.su += r.su; a.od += r.od; a.rvz += r.rv; return a; }
+const derive = a => ({
+  ...a,
+  ctr:  a.imp ? a.clk / a.imp : NaN,
+  cpc:  a.clk ? a.cost / a.clk : NaN,
+  cpa:  a.cv ? a.cost / a.cv : NaN,
+  roasAd: a.cost ? a.rev / a.cost : NaN,        // 광고 플랫폼 기준
+  roas: a.cost ? a.rvz / a.cost : NaN,          // admin 실매출 기준
+  cac:  a.od ? a.cost / a.od : NaN,
+  aov:  a.od ? a.rvz / a.od : NaN,
+  used: a.budget ? a.cost / a.budget : NaN,
+});
+
+function setPreset(p) {
+  state.preset = p;
+  if (p === 0) { state.from = MIN_DATE; state.to = MAX_DATE; }
+  else if (p === "mtd") { state.to = MAX_DATE; state.from = MAX_DATE.slice(0, 8) + "01"; }
+  else { state.to = MAX_DATE; state.from = clampDate(shiftDate(MAX_DATE, -(p - 1))); }
+  setDateInputs(state.from, state.to);
+  document.querySelectorAll("[data-range]").forEach(x =>
+    x.setAttribute("aria-pressed", String(x.dataset.range === String(p))));
+}
+function setDateInputs(f, t) {
+  for (const [id, v] of [["#date-from", f], ["#date-to", t]]) {
+    $(id).value = v;
+    $(id).setAttribute("value", v);     // 속성까지 반영해야 정적 스냅샷에도 남는다
+  }
+}
+
+const inRange = r => r.d >= state.from && r.d <= state.to;
+const execBrands = () => BRANDS.filter(b => state.brands.has(b.code));
+
+/* 월 예산을 선택 기간과 겹치는 일수만큼 일할 계산한다.
+   그러지 않으면 "최근 30일" 집행액을 두 달치 예산과 비교하게 된다. */
+function proratedBudget(codes) {
+  const out = {};
+  for (const r of BUDGET) {
+    if (!codes.has(r.b)) continue;
+    const [y, mo] = r.m.split("-").map(Number);
+    const dim = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    const mStart = `${r.m}-01`, mEnd = `${r.m}-${String(dim).padStart(2, "0")}`;
+    const from = state.from > mStart ? state.from : mStart;
+    const to = state.to < mEnd ? state.to : mEnd;
+    if (from > to) continue;
+    out[r.b] = (out[r.b] || 0) + r.amt * daysBetween(from, to) / dim;
+  }
+  return out;
+}
+
+/* ══ SVG 헬퍼 ═════════════════════════════════════════════════ */
+const NS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs) => {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  return n;
+};
+function niceTicks(max, count = 4) {
+  if (max <= 0) return [0, 1];
+  const raw = max / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].find(m => m * mag >= raw) * mag;
+  const top = Math.ceil(max / step) * step;     // 최댓값이 축 위로 삐져나가지 않게 올림
+  const out = [];
+  for (let v = 0; v <= top + step * 0.001; v += step) out.push(v);
+  return out;
+}
+
+/* 라인 차트 — 크로스헤어 + 툴팁, 축은 언제나 하나 */
+function lineChart(host, { dates, series, height = 250, yFmt = won, endLabels = true, empty = "데이터가 없습니다." }) {
+  host.innerHTML = "";
+  if (!dates.length || !series.length) { host.innerHTML = `<p class="empty">${empty}</p>`; return; }
+  const W = host.clientWidth || 640, H = height;
+  const pad = { l: 56, r: endLabels ? 60 : 18, t: 14, b: 26 };
+  const pw = Math.max(40, W - pad.l - pad.r), ph = H - pad.t - pad.b;
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img" });
+
+  const ticks = niceTicks(Math.max(1, ...series.flatMap(s => s.values)));
+  const top = ticks[ticks.length - 1];
+  const x = i => pad.l + (dates.length === 1 ? pw / 2 : (i / (dates.length - 1)) * pw);
+  const y = v => pad.t + ph - (v / top) * ph;
+
+  for (const t of ticks) {
+    svg.append(svgEl("line", { x1: pad.l, x2: pad.l + pw, y1: y(t), y2: y(t), stroke: cssVar("--grid"), "stroke-width": 1 }));
+    const lb = svgEl("text", { x: pad.l - 8, y: y(t) + 4, "text-anchor": "end", fill: cssVar("--text-muted"), "font-size": 11 });
+    lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+    lb.textContent = yFmt(t);
+    svg.append(lb);
+  }
+  svg.append(svgEl("line", { x1: pad.l, x2: pad.l + pw, y1: pad.t + ph, y2: pad.t + ph, stroke: cssVar("--axis"), "stroke-width": 1 }));
+
+  const step = Math.max(1, Math.ceil(dates.length / 8));
+  const last = dates.length - 1, idxs = [];
+  for (let i = 0; i < last; i += step) idxs.push(i);
+  while (idxs.length && x(last) - x(idxs[idxs.length - 1]) < 46) idxs.pop();  // 마지막 라벨과 겹치면 버린다
+  idxs.push(last);
+  for (const i of idxs) {
+    const t = svgEl("text", { x: x(i), y: H - 8, "text-anchor": "middle", fill: cssVar("--text-muted"), "font-size": 11 });
+    t.textContent = mmdd(dates[i]);
+    svg.append(t);
+  }
+
+  for (const s of series) {
+    const d = s.values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    if (s.area) svg.append(svgEl("path", { d: `${d} L${x(last)},${y(0)} L${x(0)},${y(0)} Z`, fill: s.color, "fill-opacity": 0.1, stroke: "none" }));
+    svg.append(svgEl("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  }
+  series.forEach(s => svg.append(svgEl("circle", {
+    cx: x(last), cy: y(s.values[last]), r: 4, fill: s.color,
+    stroke: cssVar("--surface-1"), "stroke-width": 2 })));
+
+  // 끝 라벨은 서로 충분히 벌어져 있을 때만 — 겹치면 범례·툴팁에 맡긴다
+  if (endLabels) {
+    const ys = series.map(s => y(s.values[last])).sort((a, b) => a - b);
+    const ok = ys.every((v, i) => i === 0 || v - ys[i - 1] > 15);
+    if (ok) series.forEach(s => {
+      const t = svgEl("text", { x: x(last) + 9, y: y(s.values[last]) + 4, fill: cssVar("--text-secondary"), "font-size": 11.5 });
+      t.textContent = yFmt(s.values[last]);
+      svg.append(t);
+    });
+  }
+
+  const cross = svgEl("line", { y1: pad.t, y2: pad.t + ph, stroke: cssVar("--axis"), "stroke-width": 1, opacity: 0 });
+  svg.append(cross);
+  const dots = series.map(s => {
+    const c = svgEl("circle", { r: 4.5, fill: s.color, stroke: cssVar("--surface-1"), "stroke-width": 2, opacity: 0 });
+    svg.append(c); return c;
+  });
+  host.append(svg);
+
+  const tip = el("div", { class: "tip" });
+  host.append(tip);
+  svg.addEventListener("mousemove", ev => {
+    const r = svg.getBoundingClientRect();
+    const i = Math.max(0, Math.min(last, Math.round(((ev.clientX - r.left - pad.l) / pw) * last)));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("opacity", 1);
+    dots.forEach((c, k) => { c.setAttribute("cx", x(i)); c.setAttribute("cy", y(series[k].values[i])); c.setAttribute("opacity", 1); });
+    tip.innerHTML = `<div class="t-date">${dates[i]}</div>` + series.map(s =>
+      `<div class="t-row"><span class="t-name"><i style="background:${s.color}"></i>${s.name}</span><b>${yFmt(s.values[i])}</b></div>`).join("");
+    tip.style.opacity = 1;
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(W - tw, x(i) - tw / 2)) + "px";
+    tip.style.top = Math.max(0, ev.clientY - r.top - 20 - series.length * 20) + "px";
+  });
+  svg.addEventListener("mouseleave", () => {
+    tip.style.opacity = 0; cross.setAttribute("opacity", 0);
+    dots.forEach(c => c.setAttribute("opacity", 0));
+  });
+}
+
+/* 가로 막대 — 값은 막대 끝 바깥에 직접 라벨 */
+function barsH(host, { rows, fmt = won, note = () => "", empty = "데이터가 없습니다." }) {
+  host.innerHTML = "";
+  if (!rows.length) { host.innerHTML = `<p class="empty">${empty}</p>`; return; }
+  const W = host.clientWidth || 380;
+  const rowH = 36, padL = 112, padR = 128, H = rows.length * rowH + 14;
+  const pw = Math.max(30, W - padL - padR);
+  const max = Math.max(1, ...rows.map(r => r.value));
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img" });
+
+  rows.forEach((r, i) => {
+    const cy = i * rowH + 11, bh = 15, bw = Math.max(2, (r.value / max) * pw);
+    const name = svgEl("text", { x: padL - 10, y: cy + bh - 2, "text-anchor": "end", fill: cssVar("--text-secondary"), "font-size": 12 });
+    name.textContent = r.label;
+    svg.append(name);
+    svg.append(svgEl("rect", { x: padL, y: cy, width: bw, height: bh, rx: 4, fill: r.color }));
+    svg.append(svgEl("rect", { x: padL, y: cy, width: Math.min(4, bw), height: bh, fill: r.color })); // 기준선 쪽은 각지게
+    const val = svgEl("text", { x: padL + bw + 8, y: cy + bh - 2, fill: cssVar("--text-primary"), "font-size": 12 });
+    val.setAttribute("style", "font-variant-numeric:tabular-nums");
+    val.textContent = fmt(r.value) + note(r);
+    svg.append(val);
+  });
+  svg.append(svgEl("line", { x1: padL, x2: padL, y1: 5, y2: rows.length * rowH + 7, stroke: cssVar("--axis"), "stroke-width": 1 }));
+  host.append(svg);
+}
+
+/* 퍼널 — 순서형 단일 색상 램프 */
+function funnel(host, stages) {
+  host.innerHTML = "";
+  const W = host.clientWidth || 380, rowH = 54, H = stages.length * rowH + 8;
+  const ramp = [cssVar("--seq-250"), cssVar("--seq-400"), cssVar("--seq-550")];
+  const max = Math.max(1, ...stages.map(s => s.value));
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}` });
+  stages.forEach((s, i) => {
+    const y0 = i * rowH + 6, bh = 26, bw = Math.max(3, (s.value / max) * (W - 150));
+    svg.append(svgEl("rect", { x: 0, y: y0, width: bw, height: bh, rx: 4, fill: ramp[i] }));
+    const lb = svgEl("text", { x: bw + 10, y: y0 + 17, fill: cssVar("--text-primary"), "font-size": 12.5 });
+    lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+    lb.textContent = `${s.name}  ${num(s.value)}`;
+    svg.append(lb);
+    if (i < stages.length - 1) {
+      const rate = s.value ? stages[i + 1].value / s.value : 0;
+      const t = svgEl("text", { x: 2, y: y0 + bh + 16, fill: cssVar("--text-muted"), "font-size": 11 });
+      t.textContent = `↓ ${(rate * 100).toFixed(rate < 0.01 ? 2 : 1)}%`;
+      svg.append(t);
+    }
+  });
+  host.append(svg);
+}
+
+/* ══ 공통 렌더 조각 ═══════════════════════════════════════════ */
+function tiles(host, defs, cur, prev, label, cls) {
+  host.className = "tiles" + (cls ? " " + cls : "");
+  host.innerHTML = "";
+  for (const d of defs) {
+    const v = cur[d.key], p = prev[d.key];
+    let delta;
+    if (isFinite(v) && isFinite(p) && p !== 0) {
+      const ch = (v - p) / Math.abs(p);
+      const cls2 = d.upGood === null ? "neutral" : (ch >= 0) === d.upGood ? "up-good" : "down-bad";
+      delta = `<span class="${cls2}"><b>${ch >= 0 ? "▲" : "▼"} ${Math.abs(ch * 100).toFixed(1)}%</b></span> vs ${label}`;
+    } else delta = `<span class="neutral">비교 구간 없음</span>`;
+    const shown = d.fmt(v);
+    const unit = shown === "–" ? "" : d.unit;          // 값이 없으면 단위도 붙이지 않는다
+    host.append(el("div", { class: "tile", html:
+      `<div class="label">${d.label}</div>
+       <div class="value">${shown}<small>${unit}</small></div>
+       <div class="delta">${delta}</div>` }));
+  }
+}
+
+function statusBadge(ratio, bands, labels) {
+  if (!isFinite(ratio)) return "–";
+  const i = ratio >= bands[0] ? 0 : ratio >= bands[1] ? 1 : 2;
+  const tone = ["good", "warning", "critical"][i];
+  return `<span class="badge"><i style="color:var(--${tone})">●</i>${labels[i]}</span>`;
+}
+
+function sortRows(rows, sort) {
+  return [...rows].sort((a, b) => {
+    const av = a[sort.key], bv = b[sort.key];
+    if (typeof av === "string") return sort.dir * av.localeCompare(bv, "ko");
+    return sort.dir * ((isFinite(av) ? av : -Infinity) - (isFinite(bv) ? bv : -Infinity));
+  });
+}
+
+function dataTable(host, cols, rows, sort, onSort, totalRow) {
+  host.innerHTML = "";
+  const head = el("tr");
+  for (const c of cols) {
+    const arrow = sort && sort.key === c.key ? (sort.dir < 0 ? " ▼" : " ▲") : "";
+    const th = el("th", { text: c.label + arrow, class: c.nosort || !onSort ? "" : "sortable" });
+    if (onSort && !c.nosort) th.onclick = () => onSort(c.key);
+    head.append(th);
+  }
+  host.append(el("thead", {}, head));
+  const body = el("tbody");
+  for (const r of rows) body.append(el("tr", { html: cols.map(c => `<td>${c.f(r)}</td>`).join("") }));
+  if (totalRow) body.append(el("tr", { class: "total", html: cols.map(c => `<td>${c.t ? c.t(totalRow) : (c.key === cols[0].key ? "합계" : "")}</td>`).join("") }));
+  host.append(body);
+}
+
+function simpleTable(host, cols, rows) {
+  host.innerHTML = "";
+  const t = el("table");
+  t.append(el("thead", {}, el("tr", { html: cols.map(c => `<th>${c[0]}</th>`).join("") })));
+  t.append(el("tbody", {}, rows.map(r => el("tr", { html: cols.map(c => `<td>${c[1](r)}</td>`).join("") }))));
+  host.append(t);
+}
+
+/* ══ 경영 대시보드 ════════════════════════════════════════════ */
+const EXEC_TILES = [
+  { key: "rvz",  label: "매출",     fmt: won,  unit: "원", upGood: true },
+  { key: "od",   label: "결제수",   fmt: num,  unit: "건", upGood: true },
+  { key: "su",   label: "회원가입", fmt: num,  unit: "명", upGood: true },
+  { key: "cost", label: "광고비",   fmt: won,  unit: "원", upGood: null },
+  { key: "roas", label: "ROAS",     fmt: pct0, unit: "",   upGood: true },
+  { key: "cac",  label: "CAC",      fmt: v => (isFinite(v) ? won(v) : "–"), unit: "원", upGood: false },
+];
+
+const EXEC_COLS = [
+  { key: "name",   label: "사업",   f: r => `<span class="cell-name"><i style="background:${r.color}"></i>${r.name}</span>`, t: () => "합계" },
+  { key: "budget", label: "예산",   f: r => num(r.budget), t: r => num(r.budget) },
+  { key: "cost",   label: "광고비", f: r => num(r.cost),   t: r => num(r.cost) },
+  { key: "used",   label: "소진율", f: r => pct0(r.used),  t: r => pct0(r.used) },
+  { key: "su",     label: "가입",   f: r => num(r.su),     t: r => num(r.su) },
+  { key: "od",     label: "결제",   f: r => num(r.od),     t: r => num(r.od) },
+  { key: "rvz",    label: "매출",   f: r => num(r.rvz),    t: r => num(r.rvz) },
+  { key: "aov",    label: "객단가", f: r => num(r.aov),    t: r => num(r.aov) },
+  { key: "cac",    label: "CAC",    f: r => num(r.cac),    t: r => num(r.cac) },
+  { key: "roas",   label: "ROAS",   f: r => pct0(r.roas),  t: r => pct0(r.roas) },
+  { key: "st",     label: "상태",   nosort: true, f: r => statusBadge(r.roas, [1, 0.6], ["양호", "주의", "심각"]) },
+];
+
+function renderExec() {
+  const brands = execBrands();
+  const codes = new Set(brands.map(b => b.code));
+  const ads = ADS.filter(r => codes.has(r.b) && inRange(r));
+  const biz = BIZ.filter(r => codes.has(r.b) && inRange(r));
+  const budgetBy = proratedBudget(codes);
+
+  // 직전 동일 길이 구간
+  const len = daysBetween(state.from, state.to);
+  const pFrom = shiftDate(state.from, -len), pTo = shiftDate(state.from, -1);
+  const inPrev = r => r.d >= pFrom && r.d <= pTo;
+  const prev = derive([...BIZ.filter(r => codes.has(r.b) && inPrev(r))].reduce(addBiz,
+    ADS.filter(r => codes.has(r.b) && inPrev(r)).reduce(addAd, zero())));
+
+  const base = biz.reduce(addBiz, ads.reduce(addAd, zero()));
+  base.budget = Object.values(budgetBy).reduce((a, b) => a + b, 0);
+  if (!biz.length) base.su = base.od = base.rvz = NaN;   // 0건이 아니라 "아직 없음"
+  if (!base.budget) base.budget = NaN;
+  const cur = derive(base);
+  tiles($("#exec-tiles"), EXEC_TILES, cur, prev, `직전 ${len}일`);
+
+  /* 사업별 일별 매출 */
+  const dates = [...new Set(biz.map(r => r.d))].sort();
+  const perBrandDate = {};
+  biz.forEach(r => ((perBrandDate[r.b] ||= {})[r.d] = (perBrandDate[r.b][r.d] || 0) + r.rv));
+  const series = brands
+    .filter(b => Object.keys(perBrandDate[b.code] || {}).length)
+    .map(b => ({ name: b.ko, color: brandColor(b.code), values: dates.map(d => (perBrandDate[b.code] || {})[d] || 0) }));
+  $("#rev-legend").innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("");
+  lineChart($("#rev-plot"), { dates, series, endLabels: series.length <= 2,
+    empty: "매출 데이터가 없습니다. 데이터 입력 › 사업 실적에서 채워 주세요." });
+  simpleTable($("#rev-table"), [["날짜", d => d]].concat(
+    series.map((s, i) => [s.name, d => num(s.values[dates.indexOf(d)])])), [...dates].reverse());
+
+  /* 사업별 집계 */
+  const agg = {};
+  brands.forEach(b => (agg[b.code] = zero()));
+  ads.forEach(r => addAd(agg[r.b], r));
+  biz.forEach(r => addBiz(agg[r.b], r));
+  const hasBiz = new Set(biz.map(r => r.b));
+  const hasAds = new Set(ads.map(r => r.b));
+  brands.forEach(b => {
+    const a = agg[b.code];
+    a.budget = budgetBy[b.code] || NaN;
+    if (!hasBiz.has(b.code)) a.su = a.od = a.rvz = NaN;
+    if (!hasAds.has(b.code)) a.imp = a.clk = a.cost = a.cv = a.rev = NaN;
+  });
+  const rows = brands.map(b => ({
+    code: b.code, name: b.ko, color: brandColor(b.code), ...derive(agg[b.code]),
+  }));
+
+  const revRows = rows.filter(r => r.rvz > 0).sort((a, b) => b.rvz - a.rvz);
+  barsH($("#brev-plot"), {
+    rows: revRows.map(r => ({ label: r.name, value: r.rvz, color: r.color, roas: r.roas })),
+    note: r => ` (ROAS ${pct0(r.roas)})`,
+    empty: "매출 데이터 없음",
+  });
+  simpleTable($("#brev-table"), [["사업", r => r.name], ["매출", r => num(r.rvz)], ["광고비", r => num(r.cost)], ["ROAS", r => pct0(r.roas)]], revRows);
+
+  /* 예산 소진 미터 */
+  const mh = $("#budget-meters");
+  mh.innerHTML = "";
+  const withBudget = rows.filter(r => r.budget > 0);
+  if (!withBudget.length)
+    mh.innerHTML = `<p class="empty">등록된 예산 없음</p>`;
+  for (const r of withBudget) {
+    const tone = r.used > 1 ? "critical" : r.used > 0.9 ? "warning" : "good";
+    const mark = r.used > 1 ? "초과" : r.used > 0.9 ? "임박" : "여유";
+    mh.append(el("div", { class: "meter", html:
+      `<div class="m-top">
+         <span>${r.name} <span style="color:var(--${tone})">● ${mark}</span></span>
+         <span class="r">${num(r.cost)} / ${num(r.budget)}원 · ${pct0(r.used)}</span>
+       </div>
+       <div class="track"><div class="fill" style="width:${Math.min(100, r.used * 100)}%;background:var(--${tone})"></div></div>` }));
+  }
+
+  /* 퍼널: 클릭 → 가입 → 결제 */
+  if (biz.length) {
+    funnel($("#exec-funnel"), [
+      { name: "광고 클릭", value: cur.clk }, { name: "회원가입", value: cur.su }, { name: "결제", value: cur.od },
+    ]);
+  } else {
+    $("#exec-funnel").innerHTML = `<p class="empty">가입 · 결제 데이터 없음</p>`;
+  }
+
+  /* 사업별 성과 테이블 */
+  dataTable($("#exec-table"), EXEC_COLS, sortRows(rows, state.execSort), state.execSort,
+    k => { state.execSort = state.execSort.key === k ? { key: k, dir: -state.execSort.dir } : { key: k, dir: -1 }; render(); },
+    { name: "합계", ...cur });
+}
+
+/* ══ 광고 운영 ════════════════════════════════════════════════ */
+const ADS_TILES = [
+  { key: "cost", label: "광고비", fmt: won, unit: "원", upGood: null },
+  { key: "clk",  label: "클릭수", fmt: num, unit: "회", upGood: true },
+  { key: "cv",   label: "전환",   fmt: num, unit: "건", upGood: true },
+  { key: "cpa",  label: "CPA",    fmt: v => (isFinite(v) ? won(v) : "–"), unit: "원", upGood: false },
+  { key: "roasAd", label: "ROAS", fmt: pct0, unit: "", upGood: true },
+];
+const PERF_COLS = [
+  { key: "name",   label: "매체",     f: r => `<span class="cell-name"><i style="background:${r.color}"></i>${r.name}</span>`, t: () => "합계" },
+  { key: "imp",    label: "노출수",   f: r => num(r.imp),  t: r => num(r.imp) },
+  { key: "clk",    label: "클릭수",   f: r => num(r.clk),  t: r => num(r.clk) },
+  { key: "ctr",    label: "CTR",      f: r => pct(r.ctr),  t: r => pct(r.ctr) },
+  { key: "cpc",    label: "CPC",      f: r => num(r.cpc),  t: r => num(r.cpc) },
+  { key: "cost",   label: "광고비",   f: r => num(r.cost), t: r => num(r.cost) },
+  { key: "cv",     label: "전환",     f: r => num(r.cv),   t: r => num(r.cv) },
+  { key: "rev",    label: "전환매출", f: r => num(r.rev),  t: r => num(r.rev) },
+  { key: "cpa",    label: "CPA",      f: r => num(r.cpa),  t: r => num(r.cpa) },
+  { key: "roasAd", label: "ROAS",     f: r => pct0(r.roasAd), t: r => pct0(r.roasAd) },
+  { key: "st",     label: "상태",     nosort: true, f: r => statusBadge(r.roasAd, [1, 0.5], ["양호", "주의", "심각"]) },
+];
+
+function renderAds() {
+  const rowsAll = ADS.filter(r => r.b === state.brand && inRange(r) && state.channels.has(r.p));
+  const len = daysBetween(state.from, state.to);
+  const pFrom = shiftDate(state.from, -len), pTo = shiftDate(state.from, -1);
+  const prev = derive(ADS.filter(r => r.b === state.brand && r.d >= pFrom && r.d <= pTo && state.channels.has(r.p)).reduce(addAd, zero()));
+  const cur = derive(rowsAll.reduce(addAd, zero()));
+  tiles($("#ads-tiles"), ADS_TILES, cur, prev, `직전 ${len}일`, "five");
+
+  const dates = [...new Set(rowsAll.map(r => r.d))].sort();
+  const byDate = Object.fromEntries(dates.map(d => [d, zero()]));
+  rowsAll.forEach(r => addAd(byDate[r.d], r));
+  const s1 = { name: "광고비", color: cssVar("--series-1"), values: dates.map(d => byDate[d].cost), area: true };
+  const s2 = { name: "전환매출", color: cssVar("--series-2"), values: dates.map(d => byDate[d].rev) };
+  $("#trend-legend").innerHTML = [s1, s2].map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("");
+  lineChart($("#trend-plot"), { dates, series: [s1, s2] });
+  simpleTable($("#trend-table"), [["날짜", d => d], ["광고비", d => num(byDate[d].cost)],
+    ["전환", d => num(byDate[d].cv)], ["전환매출", d => num(byDate[d].rev)]], [...dates].reverse());
+
+  const per = {};
+  rowsAll.forEach(r => addAd(per[r.p] ||= zero(), r));
+  const perRows = PLATFORMS.filter(p => state.channels.has(p.code)).map(p => ({
+    code: p.code, name: p.ko, color: platColor(p.code), ...derive(per[p.code] || zero()),
+  }));
+  const mix = perRows.filter(r => r.cost > 0).sort((a, b) => b.cost - a.cost);
+  const totalCost = mix.reduce((s, r) => s + r.cost, 0);
+  barsH($("#mix-plot"), {
+    rows: mix.map(r => ({ label: r.name, value: r.cost, color: r.color })),
+    note: r => ` (${totalCost ? Math.round(r.value / totalCost * 100) : 0}%)`,
+  });
+  simpleTable($("#mix-table"), [["매체", r => r.name], ["광고비", r => num(r.cost)]], mix);
+
+  dataTable($("#perf-table"), PERF_COLS, sortRows(perRows, state.adsSort), state.adsSort,
+    k => { state.adsSort = state.adsSort.key === k ? { key: k, dir: -state.adsSort.dir } : { key: k, dir: -1 }; render(); },
+    { name: "합계", ...cur });
+
+  renderAdDetail();
+}
+
+function renderAdDetail() {
+  const opts = PLATFORMS.filter(p => state.channels.has(p.code));
+  if (!opts.some(p => p.code === state.detail)) state.detail = (opts[0] || PLATFORMS[0]).code;
+  $("#detail-select").innerHTML = opts.map(p =>
+    `<option value="${p.code}"${p.code === state.detail ? " selected" : ""}>${p.ko}</option>`).join("");
+
+  const p = P_BY[state.detail];
+  $("#detail-title").textContent = `매체 상세 · ${p.ko}`;
+  const rows = ADS.filter(r => r.b === state.brand && inRange(r) && r.p === state.detail);
+  const dates = [...new Set(rows.map(r => r.d))].sort();
+  const byDate = Object.fromEntries(dates.map(d => [d, zero()]));
+  rows.forEach(r => addAd(byDate[r.d], r));
+
+  const costs = dates.map(d => byDate[d].cost);
+  const ma = costs.map((_, i) => {
+    const w = costs.slice(Math.max(0, i - 6), i + 1);
+    return w.reduce((a, b) => a + b, 0) / w.length;
+  });
+  const c1 = platColor(state.detail), c2 = cssVar("--text-muted");
+  $("#detail-legend").innerHTML =
+    `<span><i style="background:${c1}"></i>일별 광고비</span><span><i style="background:${c2}"></i>7일 이동평균</span>`;
+  lineChart($("#detail-plot"), {
+    dates, height: 230, endLabels: false,
+    series: [{ name: "일별 광고비", color: c1, values: costs, area: true }, { name: "7일 이동평균", color: c2, values: ma }],
+  });
+
+  const a = derive(rows.reduce(addAd, zero()));
+  funnel($("#funnel-plot"), [{ name: "노출", value: a.imp }, { name: "클릭", value: a.clk }, { name: "전환", value: a.cv }]);
+  simpleTable($("#detail-table"), [["지표", r => r[0]], ["값", r => r[1]]], [
+    ["노출수", num(a.imp)], ["클릭수", num(a.clk)], ["CTR", pct(a.ctr)],
+    ["CPC", isFinite(a.cpc) ? num(a.cpc) + "원" : "–"], ["광고비", num(a.cost) + "원"],
+    ["전환수", num(a.cv) + "건"], ["전환매출", num(a.rev) + "원"],
+    ["CPA", isFinite(a.cpa) ? num(a.cpa) + "원" : "–"], ["ROAS", pct0(a.roasAd)],
+    ["집행일수", num(dates.length) + "일"],
+  ]);
+}
+
+/* ══ 스프레드시트 입력 ════════════════════════════════════════ */
+const sheetBrandOr = () => (state.sheetBrand === "*" ? state.brand : state.sheetBrand);
+const sheetPlatOr = () => (state.sheetPlat === "*" ? "Meta_sponsored" : state.sheetPlat);
+const BRAND_OPTS = BRANDS.map(b => [b.code, b.ko]);
+const PLAT_OPTS = PLATFORMS.map(p => [p.code, p.ko]);
+const SHEETS = {
+  ads: {
+    title: "광고 실적", data: ADS, table: "ad_daily",
+    cols: [
+      { k: "d", label: "날짜", type: "date", w: 104 },
+      { k: "b", label: "사업", type: "select", opts: BRAND_OPTS, w: 96 },
+      { k: "p", label: "매체", type: "select", opts: PLAT_OPTS, w: 132 },
+      { k: "imp", label: "노출수", type: "num" }, { k: "clk", label: "클릭수", type: "num" },
+      { k: "cost", label: "광고비", type: "num" }, { k: "cv", label: "전환", type: "num" },
+      { k: "rev", label: "전환매출", type: "num" },
+    ],
+    blank: () => ({ d: state.to, b: sheetBrandOr(), p: sheetPlatOr(),
+                    imp: 0, clk: 0, cost: 0, cv: 0, rev: 0 }),
+    match: r => inRange(r) && (state.sheetPlat === "*" || r.p === state.sheetPlat),
+    conflict: "date,brand,platform",
+    toRow: r => ({ date: r.d, brand: r.b, platform: r.p, impressions: r.imp,
+                   clicks: r.clk, adcost: r.cost, conversions: r.cv, conv_value: r.rev }),
+  },
+  biz: {
+    title: "사업 실적", data: BIZ, table: "business_daily",
+    cols: [
+      { k: "d", label: "날짜", type: "date", w: 104 },
+      { k: "b", label: "사업", type: "select", opts: BRAND_OPTS, w: 96 },
+      { k: "su", label: "회원가입", type: "num" }, { k: "od", label: "결제수", type: "num" },
+      { k: "rv", label: "매출", type: "num" },
+    ],
+    blank: () => ({ d: state.to, b: sheetBrandOr(), su: 0, od: 0, rv: 0 }),
+    match: r => inRange(r),
+    conflict: "date,brand",
+    toRow: r => ({ date: r.d, brand: r.b, signups: r.su, orders: r.od, revenue: r.rv }),
+  },
+  budget: {
+    title: "월별 예산", data: BUDGET, table: "budgets",
+    cols: [
+      { k: "m", label: "월", type: "text", w: 104 },
+      { k: "b", label: "사업", type: "select", opts: BRAND_OPTS, w: 96 },
+      { k: "amt", label: "예산", type: "num" },
+    ],
+    blank: () => ({ m: state.to.slice(0, 7), b: sheetBrandOr(), amt: 0 }),
+    match: () => true,
+    conflict: "month,brand",
+    toRow: r => ({ month: r.m + "-01", brand: r.b, amount: r.amt }),   // 월은 1일로 정규화
+  },
+};
+const MAX_SHEET_ROWS = 300;
+let sheetRows = [];                 // 화면에 띄운 행 (원본 객체 참조)
+/* 행을 앞에 끼워 넣으면 인덱스가 밀리므로 행 '객체'를 키로 잡는다 */
+const dirty = new Map();            // row -> Set(수정한 컬럼 key)
+const added = new Set();            // 새로 만든 row
+let sel = { r: 0, c: 0 };
+const dirtyCount = () => [...dirty.values()].reduce((n, s) => n + s.size, 0);
+
+const cellText = (row, col) => {
+  const v = row[col.k];
+  if (col.type === "select") return (col.opts.find(o => o[0] === v) || [v, v])[1];
+  if (col.type === "num") return num(v);
+  return v == null ? "" : String(v);
+};
+const cellRaw = (row, col) => (col.type === "num" ? String(row[col.k] ?? 0) : String(row[col.k] ?? ""));
+
+function buildSheet() {
+  const cfg = SHEETS[state.sheet];
+  $("#sheet-title").textContent = cfg.title;
+  const all = cfg.data.filter(cfg.match)
+    .filter(r => state.sheetBrand === "*" || r.b === state.sheetBrand);
+  sheetRows = all.slice(-MAX_SHEET_ROWS).reverse();
+  dirty.clear(); added.clear(); sel = { r: 0, c: 0 };
+  drawSheet();
+  const who = [
+    state.sheetBrand === "*" ? "전체 사업" : B_BY[state.sheetBrand].ko,
+    state.sheet === "ads" ? (state.sheetPlat === "*" ? "전체 매체" : P_BY[state.sheetPlat].ko) : null,
+    cfg.table,
+  ].filter(Boolean).join(" · ");
+  $("#sheet-count").textContent = all.length
+    ? `${who} · ${num(all.length)}행 중 최근 ${num(sheetRows.length)}행`
+    : `${who} · 입력된 데이터 없음`;
+  markDirty();
+}
+
+function drawSheet() {
+  const cfg = SHEETS[state.sheet], t = $("#sheet");
+  t.innerHTML = "";
+  const head = el("tr", {}, [el("th", { class: "rowno", text: "#" })]);
+  for (const c of cfg.cols) head.append(el("th", { text: c.label, style: c.w ? `min-width:${c.w}px` : "min-width:96px" }));
+  t.append(el("thead", {}, head));
+
+  const body = el("tbody");
+  sheetRows.forEach((row, ri) => {
+    const tr = el("tr", added.has(row) ? { class: "newrow" } : {});
+    tr.append(el("td", { class: "rowno", text: String(ri + 1) }));
+    cfg.cols.forEach((col, ci) => {
+      const td = el("td", { tabindex: "0", "data-r": ri, "data-c": ci, text: cellText(row, col) });
+      if (isLocked(col)) td.classList.add("ro");
+      if (dirty.get(row)?.has(col.k)) td.classList.add("dirty");
+      if (sel.r === ri && sel.c === ci) td.classList.add("sel");
+      tr.append(td);
+    });
+    body.append(tr);
+  });
+  t.append(body);
+  if (!sheetRows.length) {
+    const span = cfg.cols.length + 1;
+    body.append(el("tr", { html:
+      `<td colspan="${span}" style="text-align:center;color:var(--text-muted);padding:26px">
+         입력된 행이 없습니다. 오른쪽 위 '행 추가'로 시작하거나 엑셀에서 복사해 붙여넣으세요.</td>` }));
+  }
+  const cur = t.querySelector("td.sel");
+  if (cur) cur.focus({ preventScroll: false });
+}
+
+/* 위에서 사업·매체를 골라 놓았으면 해당 칸은 잠근다 */
+const isLocked = col =>
+  (col.k === "b" && state.sheetBrand !== "*") ||
+  (col.k === "p" && state.sheetPlat !== "*");
+
+function markDirty() {
+  const n = dirtyCount();
+  $("#sheet-dirty").textContent = n ? `수정한 셀 ${n}개 · 행 ${dirty.size}개` : "변경 없음";
+  $("#sheet-save").disabled = !n;
+  $("#sheet-reset").disabled = !n;
+}
+
+function commit(ri, ci, raw) {
+  const col = SHEETS[state.sheet].cols[ci], row = sheetRows[ri];
+  if (isLocked(col)) return;
+  let v = raw;
+  if (col.type === "num") v = Number(String(raw).replace(/[^\d.-]/g, "")) || 0;
+  if (col.type === "select") {
+    const hit = col.opts.find(o => o[1] === raw || o[0] === raw);
+    if (!hit) { toast(`'${raw}' 는 선택할 수 없는 값입니다`); return; }
+    v = hit[0];
+  }
+  if (String(row[col.k]) === String(v)) return;
+  row[col.k] = v;
+  if (!dirty.has(row)) dirty.set(row, new Set());
+  dirty.get(row).add(col.k);
+  markDirty();
+}
+
+function startEdit(td, seed) {
+  const ri = +td.dataset.r, ci = +td.dataset.c;
+  const col = SHEETS[state.sheet].cols[ci];
+  if (isLocked(col)) return;
+  const inp = el("input", { type: col.type === "date" ? "date" : "text" });
+  inp.value = seed != null ? seed : (col.type === "select" ? cellText(sheetRows[ri], col) : cellRaw(sheetRows[ri], col));
+  td.textContent = "";
+  td.append(inp);
+  inp.focus();
+  if (seed == null) inp.select();
+  const finish = (save, move) => {
+    if (inp._done) return;
+    inp._done = true;
+    if (save) commit(ri, ci, inp.value);
+    drawSheet();
+    if (move) moveSel(move[0], move[1]);
+  };
+  inp.addEventListener("keydown", e => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); finish(true, [1, 0]); }
+    else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+    else if (e.key === "Tab") { e.preventDefault(); finish(true, [0, e.shiftKey ? -1 : 1]); }
+  });
+  inp.addEventListener("blur", () => finish(true));
+}
+
+function moveSel(dr, dc) {
+  const cols = SHEETS[state.sheet].cols.length;
+  sel = {
+    r: Math.max(0, Math.min(sheetRows.length - 1, sel.r + dr)),
+    c: Math.max(0, Math.min(cols - 1, sel.c + dc)),
+  };
+  drawSheet();
+}
+
+function sheetKeydown(e) {
+  const td = e.target.closest("td[data-r]");
+  if (!td) return;
+  sel = { r: +td.dataset.r, c: +td.dataset.c };
+  const K = e.key;
+  if (K === "ArrowDown") { e.preventDefault(); moveSel(1, 0); }
+  else if (K === "ArrowUp") { e.preventDefault(); moveSel(-1, 0); }
+  else if (K === "ArrowLeft") { e.preventDefault(); moveSel(0, -1); }
+  else if (K === "ArrowRight") { e.preventDefault(); moveSel(0, 1); }
+  else if (K === "Tab") { e.preventDefault(); moveSel(0, e.shiftKey ? -1 : 1); }
+  else if (K === "Enter" || K === "F2") { e.preventDefault(); startEdit(td); }
+  else if (K === "Delete" || K === "Backspace") { e.preventDefault(); commit(sel.r, sel.c, ""); drawSheet(); }
+  else if (K.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); startEdit(td, K); }
+}
+
+function sheetPaste(e) {
+  const td = e.target.closest("td[data-r]");
+  if (!td) return;
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  if (!text) return;
+  e.preventDefault();
+  const grid = text.replace(/\r/g, "").replace(/\n$/, "").split("\n").map(l => l.split("\t"));
+  const r0 = +td.dataset.r, c0 = +td.dataset.c, cols = SHEETS[state.sheet].cols.length;
+  let n = 0;
+  grid.forEach((line, i) => line.forEach((val, j) => {
+    const r = r0 + i, c = c0 + j;
+    if (r < sheetRows.length && c < cols) { commit(r, c, val.trim()); n++; }
+  }));
+  drawSheet();
+  toast(`${n}개 셀 붙여넣기`);
+}
+
+/* ══ 렌더 디스패치 ════════════════════════════════════════════ */
+function render() {
+  const brandKo = B_BY[state.brand].ko;
+  $("#page-sub").textContent =
+    state.page === "input" ? `${state.from} ~ ${state.to} · 입력 대상 ${SHEETS[state.sheet].title}`
+      : state.page === "exec" ? `${state.from} ~ ${state.to} · 사업 ${state.brands.size}개`
+      : `${state.from} ~ ${state.to} · ${brandKo} · 매체 ${state.channels.size}개`;
+
+  // 필터 바 구성은 페이지마다 다르다
+  const isExec = state.page === "exec", isAds = state.page === "ads";
+  $("#brand-chips").classList.toggle("hide", !isExec);
+  $("#brand-select").classList.toggle("hide", !isAds);
+  $("#brand-label").classList.toggle("hide", state.page === "input");   // 입력 페이지는 자체 사업 탭을 쓴다
+  $("#ch-sep").classList.toggle("hide", !isAds);
+  $("#ch-label").classList.toggle("hide", !isAds);
+  $("#channel-chips").classList.toggle("hide", !isAds);
+
+  $("#sheet-plats").classList.toggle("hide", state.sheet !== "ads");
+
+  if (isExec) renderExec();
+  else if (isAds) renderAds();
+  else buildSheet();
+}
+
+/* ══ 데이터 적재 ══════════════════════════════════════════════
+   Supabase 가 붙어 있으면 거기서, 아니면 data.js 의 로컬 데이터로 돈다. */
+const MAP_IN = {
+  ad: r => ({ d: r.date, b: r.brand, p: r.platform, imp: +r.impressions, clk: +r.clicks,
+              cost: +r.adcost, cv: +r.conversions, rev: +r.conv_value }),
+  biz: r => ({ d: r.date, b: r.brand, su: +r.signups, od: +r.orders, rv: +r.revenue }),
+  budget: r => ({ m: String(r.month).slice(0, 7), b: r.brand, amt: +r.amount }),
+};
+
+async function loadData() {
+  if (!SB) return;
+  const [ad, biz, bud] = await Promise.all([
+    sbSelect("ad_daily", "select=*&order=date.asc&limit=100000"),
+    sbSelect("business_daily", "select=*&order=date.asc&limit=100000"),
+    sbSelect("budgets", "select=*&order=month.asc&limit=10000"),
+  ]);
+  replaceAll(ADS, ad.map(MAP_IN.ad));
+  replaceAll(BIZ, biz.map(MAP_IN.biz));
+  replaceAll(BUDGET, bud.map(MAP_IN.budget));
+  recomputeDates();
+}
+
+function loginError(msg) {
+  let box = $("#login-error");
+  if (!box) {
+    box = el("p", { id: "login-error", class: "login-note", style: "color:var(--critical)" });
+    $("#login-form").append(box);
+  }
+  box.textContent = msg || "";
+}
+
+/* ══ 이벤트 ═══════════════════════════════════════════════════ */
+$("#login-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = $("#login-form button[type=submit]");
+  loginError("");
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "확인 중…";
+  try {
+    if (SB) {
+      await sbSignIn($("#email").value.trim(), $("#pw").value);
+      await loadData();
+    }
+    $("#login").hidden = true;
+    $("#app").hidden = false;
+    boot();
+  } catch (err) {
+    loginError(err.message === "Invalid login credentials"
+      ? "이메일 또는 비밀번호가 맞지 않습니다." : err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+$("#logout").onclick = () => {
+  sbSignOut();
+  $("#app").hidden = true;
+  $("#login").hidden = false;
+};
+$("#theme-toggle").onclick = () => {
+  const dark = document.documentElement.getAttribute("data-theme") === "dark"
+    || (!document.documentElement.hasAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+  render();
+};
+
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  state.page = b.dataset.page;
+  document.querySelectorAll("nav button").forEach(x => x.removeAttribute("aria-current"));
+  b.setAttribute("aria-current", "page");
+  for (const p of ["exec", "ads", "input"]) $("#page-" + p).hidden = p !== state.page;
+  $("#page-title").textContent = b.childNodes[0].textContent.trim();
+  render();
+});
+
+document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => {
+  setPreset(b.dataset.range === "mtd" ? "mtd" : +b.dataset.range);
+  render();
+});
+for (const id of ["#date-from", "#date-to"]) $(id).addEventListener("change", () => {
+  let f = $("#date-from").value || MIN_DATE, t = $("#date-to").value || MAX_DATE;
+  if (f > t) [f, t] = [t, f];
+  state.from = f; state.to = t; state.preset = null;
+  setDateInputs(f, t);
+  document.querySelectorAll("[data-range]").forEach(x => x.setAttribute("aria-pressed", "false"));
+  render();
+});
+
+document.querySelectorAll(".toggle-table").forEach(b => b.onclick = () => {
+  const box = $("#" + b.dataset.tt + "-table");
+  const on = box.classList.toggle("on");
+  b.textContent = on ? "차트로 보기" : "표로 보기";
+  b.closest(".card").querySelector(".plot").classList.toggle("hide", on);
+});
+$("#detail-select").onchange = e => { state.detail = e.target.value; renderAdDetail(); };
+
+const confirmDiscard = () =>
+  !dirty.size || confirm("저장하지 않은 수정이 있습니다. 탭을 바꾸면 사라집니다. 계속할까요?");
+
+document.querySelectorAll("#sheet-tabs button").forEach(b => b.onclick = () => {
+  if (!confirmDiscard()) return;
+  state.sheet = b.dataset.sheet;
+  document.querySelectorAll("#sheet-tabs button").forEach(x =>
+    x.setAttribute("aria-pressed", String(x === b)));
+  render();
+});
+$("#sheet").addEventListener("keydown", sheetKeydown);
+$("#sheet").addEventListener("paste", sheetPaste);
+$("#sheet").addEventListener("dblclick", e => {
+  const td = e.target.closest("td[data-r]");
+  if (td) { sel = { r: +td.dataset.r, c: +td.dataset.c }; startEdit(td); }
+});
+$("#sheet").addEventListener("focusin", e => {
+  const td = e.target.closest("td[data-r]");
+  if (td && !(sel.r === +td.dataset.r && sel.c === +td.dataset.c)) {
+    sel = { r: +td.dataset.r, c: +td.dataset.c };
+    document.querySelectorAll("#sheet td.sel").forEach(x => x.classList.remove("sel"));
+    td.classList.add("sel");
+  }
+});
+$("#sheet-add").onclick = () => {
+  const cfg = SHEETS[state.sheet];
+  const row = cfg.blank();
+  cfg.data.push(row);
+  sheetRows.unshift(row);
+  added.add(row);
+  dirty.set(row, new Set(cfg.cols.map(c => c.k)));
+  sel = { r: 0, c: 0 };
+  drawSheet(); markDirty();
+};
+$("#sheet-save").onclick = async () => {
+  const cfg = SHEETS[state.sheet];
+  const rows = [...dirty.keys()];
+  const btn = $("#sheet-save");
+  if (!SB) {                                   // 로컬 데이터로 돌 때는 메모리에만 반영
+    toast(`${rows.length}행 반영 (로컬 · Supabase 미연결)`);
+    dirty.clear(); added.clear();
+    drawSheet(); markDirty();
+    return;
+  }
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "저장 중…";
+  try {
+    await sbUpsert(cfg.table, rows.map(cfg.toRow), cfg.conflict);
+    dirty.clear(); added.clear();
+    recomputeDates();
+    toast(`${cfg.table} ${rows.length}행 저장 완료`);
+    drawSheet(); markDirty();
+  } catch (err) {
+    toast("저장 실패: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+};
+$("#sheet-reset").onclick = () => {
+  const data = SHEETS[state.sheet].data;          // 추가만 하고 저장 안 한 행은 지운다
+  for (const row of added) {
+    const i = data.indexOf(row);
+    if (i >= 0) data.splice(i, 1);
+  }
+  buildSheet();
+  toast("수정 내용을 되돌렸습니다");
+};
+
+/* 지금 보고 있는 시트 모양 그대로 CSV 템플릿을 만들어 준다.
+   BOM 을 붙여야 엑셀이 한글을 깨지 않고 연다. */
+$("#tpl-download").onclick = () => {
+  const cfg = SHEETS[state.sheet];
+  const brand = state.sheetBrand === "*" ? BRANDS[0].code : state.sheetBrand;
+  const plat = state.sheetPlat === "*" ? PLATFORMS[0].code : state.sheetPlat;
+  const sample = (offset) => cfg.cols.map(c => {
+    if (c.k === "d") return shiftDate(state.to, -offset);
+    if (c.k === "m") return state.to.slice(0, 7);
+    if (c.k === "b") return B_BY[brand].ko;
+    if (c.k === "p") return P_BY[plat].ko;
+    return "";
+  });
+  const esc = v => (/[",\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v);
+  const lines = [cfg.cols.map(c => c.label), sample(0), sample(1)]
+    .map(r => r.map(esc).join(",")).join("\r\n");
+
+  const url = URL.createObjectURL(new Blob(["﻿" + lines], { type: "text/csv;charset=utf-8" }));
+  const a = el("a", { href: url, download: `${cfg.table}_템플릿.csv` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast(`${cfg.title} 템플릿을 내려받았습니다`);
+};
+
+$("#dropzone").onclick = () => {
+  const box = $("#upload-preview");
+  box.classList.remove("hide");
+  box.innerHTML =
+    `<div class="banner" style="border-left-color:var(--good);margin:0">
+       <span>✓</span>
+       <div><b>미리보기 (프로토타입 목업)</b><br>
+       <code>(RAW)Learnershigh</code> 시트 인식 · 73컬럼 → 일자×매체 <b>911행</b>으로 변환 ·
+       신규 24행 / 갱신 887행 / 오류 0행 · 값이 <code>-</code>인 셀은 NULL 처리</div>
+     </div>
+     <div style="margin-top:10px;display:flex;gap:8px">
+       <button class="btn solid" id="confirm-up">911행 업로드</button>
+       <button class="btn" id="cancel-up">취소</button></div>`;
+  $("#confirm-up").onclick = () => { toast("실제 구현 시 ad_daily 로 upsert됩니다"); box.classList.add("hide"); };
+  $("#cancel-up").onclick = () => box.classList.add("hide");
+};
+
+let rt;
+addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (!$("#app").hidden) render(); }, 150); });
+
+/* ══ 부팅 ═════════════════════════════════════════════════════ */
+function boot() {
+  $("#date-from").min = $("#date-to").min = MIN_DATE;
+  $("#date-from").max = $("#date-to").max = MAX_DATE;
+  setPreset(30);
+
+  $("#brand-chips").innerHTML = BRANDS.map(b =>
+    `<button class="chip ent" data-brand="${b.code}" aria-pressed="true">
+       <span class="swatch" style="background:var(--series-${b.slot})"></span>${b.ko}</button>`).join(" ");
+  document.querySelectorAll("[data-brand]").forEach(b => b.onclick = () => {
+    const c = b.dataset.brand;
+    if (state.brands.has(c)) { if (state.brands.size === 1) return; state.brands.delete(c); }
+    else state.brands.add(c);
+    b.setAttribute("aria-pressed", String(state.brands.has(c)));
+    render();
+  });
+
+  const withAds = new Set(ADS.map(r => r.b));
+  $("#brand-select").innerHTML = BRANDS.map(b =>
+    `<option value="${b.code}"${b.code === state.brand ? " selected" : ""}${withAds.has(b.code) ? "" : " disabled"}>
+       ${b.ko}${withAds.has(b.code) ? "" : " (데이터 없음)"}</option>`).join("");
+  $("#brand-select").onchange = e => { state.brand = e.target.value; render(); };
+
+  // 데이터 입력: 사업을 먼저 고르고, 그 사업의 시트를 편집한다
+  $("#sheet-brands").innerHTML =
+    [["*", "전체 사업"]].concat(BRANDS.map(b => [b.code, b.ko]))
+      .map(([c, ko]) => `<button data-sb="${c}" aria-pressed="${c === state.sheetBrand}">${ko}</button>`).join("");
+  document.querySelectorAll("[data-sb]").forEach(b => b.onclick = () => {
+    if (!confirmDiscard()) return;
+    state.sheetBrand = b.dataset.sb;
+    document.querySelectorAll("[data-sb]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  });
+
+  // 광고 실적은 매체별로 나눠서 올릴 수 있게 한다
+  $("#sheet-plats").innerHTML =
+    `<button data-sp="*" aria-pressed="true">전체 매체</button>` + PLATFORMS.map(p =>
+      `<button data-sp="${p.code}" aria-pressed="false">
+         <span class="swatch" style="background:var(--series-${p.slot})"></span>${p.ko}</button>`).join("");
+  document.querySelectorAll("[data-sp]").forEach(b => b.onclick = () => {
+    if (!confirmDiscard()) return;
+    state.sheetPlat = b.dataset.sp;
+    document.querySelectorAll("[data-sp]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  });
+
+  $("#channel-chips").innerHTML = PLATFORMS.map(p =>
+    `<button class="chip ent" data-ch="${p.code}" aria-pressed="true">
+       <span class="swatch" style="background:var(--series-${p.slot})"></span>${p.ko}</button>`).join(" ");
+  document.querySelectorAll("[data-ch]").forEach(b => b.onclick = () => {
+    const c = b.dataset.ch;
+    if (state.channels.has(c)) { if (state.channels.size === 1) return; state.channels.delete(c); }
+    else state.channels.add(c);
+    b.setAttribute("aria-pressed", String(state.channels.has(c)));
+    render();
+  });
+
+  simpleTable($("#log-table"), [["일시", r => r[0]], ["파일", r => r[1]], ["행", r => r[2]], ["사용자", r => r[3]]], [
+    ["2026-09-16 09:12", "Ads RAW Data.xlsx", "911", "marketing@"],
+    ["2026-09-09 09:05", "Ads RAW Data.xlsx", "874", "marketing@"],
+    ["2026-09-02 10:41", "Ads RAW Data.xlsx", "836", "ads@"],
+  ]);
+  render();
+}
+
+/* 새로고침해도 로그인 상태를 유지한다 */
+(async () => {
+  if (!SB) return;
+  if (!await sbRestore()) return;
+  try {
+    await loadData();
+    $("#login").hidden = true;
+    $("#app").hidden = false;
+    boot();
+  } catch (err) {
+    sbSignOut();
+    loginError("세션을 복구하지 못했습니다: " + err.message);
+  }
+})();
+</script>
+</body>
+</html>

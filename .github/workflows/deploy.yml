@@ -1,0 +1,58 @@
+name: Deploy to GitHub Pages
+
+# 빌드 없는 정적 사이트다. main 에 push 하면 그대로 Pages 로 올라간다.
+# Supabase 접속 정보는 리포지토리 Variables 에서 주입한다
+#   Settings > Secrets and variables > Actions > Variables
+#     SUPABASE_URL       : https://xxxx.supabase.co
+#     SUPABASE_ANON_KEY  : eyJ...  (anon 공개키. service_role 키는 절대 넣지 말 것)
+# anon 키는 어차피 브라우저에 노출되는 값이라 Variables 로 충분하다.
+# 데이터를 지키는 건 Supabase 의 RLS 정책이다.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: config.js 생성
+        run: |
+          cat > config.js <<EOF
+          // CI에서 생성됨 — 직접 수정하지 마세요
+          window.APP_CONFIG = {
+            SUPABASE_URL: "${{ vars.SUPABASE_URL }}",
+            SUPABASE_ANON_KEY: "${{ vars.SUPABASE_ANON_KEY }}"
+          };
+          EOF
+
+      - name: 배포 대상만 추리기
+        run: |
+          mkdir -p _site
+          cp index.html config.js _site/
+          cp Logo.png _site/ 2>/dev/null || true
+          cp -r assets _site/ 2>/dev/null || true
+          # 원천 엑셀·샘플 데이터·스크립트는 배포하지 않는다
+          ls -la _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
