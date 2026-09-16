@@ -9,7 +9,7 @@ param(
   [switch]$Public
 )
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
             [Environment]::GetEnvironmentVariable('Path', 'User')
 
@@ -17,7 +17,7 @@ function Step($msg) { Write-Host "`n> $msg" -ForegroundColor Cyan }
 
 # ── 사전 확인 ────────────────────────────────────────────────
 Step 'GitHub 로그인 확인'
-gh auth status 2>&1 | Out-Null
+gh auth status *> $null
 if ($LASTEXITCODE -ne 0) { throw "GitHub 로그인이 필요합니다. 먼저 'gh auth login' 을 실행하세요." }
 $owner = (gh api user --jq .login).Trim()
 Write-Host "  계정: $owner"
@@ -44,7 +44,7 @@ Write-Host '  이상 없음'
 $vis = if ($Public) { '--public' } else { '--private' }
 $visName = if ($Public) { 'public' } else { 'private' }
 Step "레포 준비: $owner/$Repo ($visName)"
-gh repo view "$owner/$Repo" 2>&1 | Out-Null
+gh repo view "$owner/$Repo" *> $null
 if ($LASTEXITCODE -ne 0) {
   gh repo create $Repo $vis --source . --remote origin --disable-wiki
   if ($LASTEXITCODE -ne 0) { throw '레포 생성 실패' }
@@ -67,16 +67,16 @@ gh variable set SUPABASE_ANON_KEY --repo "$owner/$Repo" --body $envMap['SUPABASE
 Write-Host '  SUPABASE_URL / SUPABASE_ANON_KEY 등록 완료'
 
 Step 'Pages 소스를 GitHub Actions 로 설정'
-gh api -X POST "repos/$owner/$Repo/pages" -f build_type=workflow 2>&1 | Out-Null
+gh api -X POST "repos/$owner/$Repo/pages" -f build_type=workflow *> $null
 if ($LASTEXITCODE -ne 0) {
-  gh api -X PUT "repos/$owner/$Repo/pages" -f build_type=workflow 2>&1 | Out-Null
+  gh api -X PUT "repos/$owner/$Repo/pages" -f build_type=workflow *> $null
   if ($LASTEXITCODE -ne 0) {
     Write-Host "  자동 설정 실패 - Settings > Pages > Source 를 'GitHub Actions' 로 직접 바꿔주세요" -ForegroundColor Yellow
   } else { Write-Host '  완료 (기존 설정 변경)' }
 } else { Write-Host '  완료' }
 
 Step '배포 실행'
-gh workflow run deploy.yml --repo "$owner/$Repo" 2>&1 | Out-Null
+gh workflow run deploy.yml --repo "$owner/$Repo" *> $null
 Start-Sleep -Seconds 6
 gh run list --repo "$owner/$Repo" --limit 3
 
