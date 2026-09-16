@@ -1,4 +1,4 @@
-# 레포 생성 → push → Pages 켜기 → Supabase 접속 정보 등록까지 한 번에.
+﻿# 레포 생성 → push → Pages 켜기 → Supabase 접속 정보 등록까지 한 번에.
 # 먼저 `gh auth login` 으로 로그인돼 있어야 합니다.
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1
