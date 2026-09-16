@@ -81,6 +81,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border: 1px solid var(--border); background: var(--plane);
 }
 .field input:focus { outline: 2px solid var(--brand-accent); outline-offset: -1px; }
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 52px; }
+.pw-wrap button {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: 0; background: none; color: var(--text-muted); cursor: pointer;
+  font-size: 12px; padding: 4px 6px; border-radius: 5px;
+}
+.pw-wrap button:hover { color: var(--text-primary); background: var(--surface-1); }
+.caps-warn { margin: 6px 0 0; font-size: 11.5px; color: var(--warning); }
 .btn-primary {
   width: 100%; padding: 10px; margin-top: 8px; border: 0; border-radius: 8px;
   background: var(--brand-ink); color: var(--surface-1); font-weight: 600; cursor: pointer;
@@ -369,7 +378,11 @@ td .mix-in:focus { outline: 2px solid var(--brand-accent); outline-offset: -1px;
     </div>
     <div class="field">
       <label for="pw">비밀번호</label>
-      <input id="pw" type="password" autocomplete="current-password" required>
+      <div class="pw-wrap">
+        <input id="pw" type="password" autocomplete="current-password" required>
+        <button type="button" id="pw-toggle" aria-label="비밀번호 표시">표시</button>
+      </div>
+      <p class="caps-warn" id="caps-warn" hidden>한/영 또는 Caps Lock 상태를 확인하세요</p>
     </div>
     <button class="btn-primary" type="submit">로그인</button>
     <p class="login-note">계정은 관리자가 발급합니다.</p>
@@ -1737,6 +1750,23 @@ function loginError(msg) {
 }
 
 /* ══ 이벤트 ═══════════════════════════════════════════════════ */
+$("#pw-toggle").onclick = () => {
+  const inp = $("#pw");
+  const show = inp.type === "password";
+  inp.type = show ? "text" : "password";
+  $("#pw-toggle").textContent = show ? "숨기기" : "표시";
+  inp.focus();
+};
+/* 한글 자판이나 Caps Lock 때문에 틀리는 경우가 잦아 미리 알려 준다 */
+$("#pw").addEventListener("keyup", e => {
+  const hangul = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(e.target.value);
+  const caps = e.getModifierState && e.getModifierState("CapsLock");
+  $("#caps-warn").hidden = !(hangul || caps);
+  $("#caps-warn").textContent = hangul
+    ? "한글이 입력됐습니다. 한/영 키를 확인하세요"
+    : "Caps Lock 이 켜져 있습니다";
+});
+
 $("#login-form").addEventListener("submit", async e => {
   e.preventDefault();
   const btn = $("#login-form button[type=submit]");
