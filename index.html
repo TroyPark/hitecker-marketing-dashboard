@@ -640,10 +640,10 @@ td .mix-in:focus { outline: 2px solid var(--brand-accent); outline-offset: -1px;
 
 <div class="toast" id="toast"></div>
 
-<!-- config.js 는 CI가, config.local.js 는 로컬 개발자가 만든다. 없으면 404 나고 무시된다.
-     data.js 는 Supabase 연결 전에 쓰는 로컬 데이터다. -->
+<!-- config.js 에 Supabase 주소와 anon 키가 들어간다.
+     로컬에서는 직접 만들고, 배포 때는 GitHub Actions 가 만든다. 둘 다 .gitignore 대상.
+     data.js 는 Supabase 없이 볼 때 쓰는 로컬 데이터다. -->
 <script src="config.js"></script>
-<script src="config.local.js"></script>
 <script src="data.js"></script>
 <script>
 "use strict";
@@ -1715,8 +1715,25 @@ const MAP_IN = {
   budget: r => ({ m: String(r.month).slice(0, 7), b: r.brand, p: r.platform, amt: +r.amount }),
 };
 
+/** 테이블이 없으면 PostgREST 가 'Could not find the table' 404 를 준다.
+    원문 대신 뭘 해야 하는지 알려 준다. */
+function friendlyDataError(err) {
+  if (/Could not find the table/.test(err.message)) {
+    return new Error("Supabase 에 테이블이 아직 없습니다. SQL Editor 에서 supabase/schema.sql 을 실행해 주세요.");
+  }
+  return err;
+}
+
 async function loadData() {
   if (!SB) return;
+  try {
+    await loadDataInner();
+  } catch (err) {
+    throw friendlyDataError(err);
+  }
+}
+
+async function loadDataInner() {
   const [br, pl] = await Promise.all([
     sbSelect("brands", "select=*&order=sort.asc"),
     sbSelect("platforms", "select=*&order=sort.asc"),

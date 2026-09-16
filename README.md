@@ -56,11 +56,11 @@ python scripts/migrate.py "Ads RAW Data.xlsx"             # 실제 적재
 
 ## 로컬에서 보기
 
-`index.html` 을 더블클릭한다. `config.local.js` 가 있으면 Supabase에 붙고,
+`index.html` 을 더블클릭한다. `config.js` 가 있으면 Supabase에 붙고,
 없으면 `data.js` 의 로컬 데이터로 동작한다.
 
 ```js
-// config.local.js  (gitignore 됨)
+// config.js  (gitignore 됨)
 window.APP_CONFIG = {
   SUPABASE_URL: "https://xxxx.supabase.co",
   SUPABASE_ANON_KEY: "eyJ..."
