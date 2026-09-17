@@ -15,7 +15,10 @@ alter table business_daily drop constraint if exists business_daily_refund_nonne
 alter table business_daily add constraint business_daily_refund_nonneg check (refund >= 0);
 
 -- 조회용 뷰: 최종매출과 환불률을 여기서 계산한다
-create or replace view v_business_daily as
+-- create or replace 는 컬럼을 중간에 끼워 넣지 못한다(컬럼 순서가 바뀌면 42P16).
+-- 이 뷰들을 참조하는 것이 없으므로 그냥 지우고 다시 만든다.
+drop view if exists v_business_daily;
+create view v_business_daily as
 select
   date, brand, signups, orders, revenue, refund,
   revenue - refund                    as net_revenue,
@@ -27,7 +30,8 @@ alter view v_business_daily set (security_invoker = on);
 grant select on v_business_daily to authenticated;
 
 -- 사업 단위 합산 뷰도 최종매출 기준으로 바꾼다
-create or replace view v_brand_daily as
+drop view if exists v_brand_daily;
+create view v_brand_daily as
 select
   coalesce(a.date, b.date)   as date,
   coalesce(a.brand, b.brand) as brand,
