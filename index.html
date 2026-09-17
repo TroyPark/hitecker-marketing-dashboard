@@ -309,7 +309,8 @@ table.sheet tr.newrow td { background: color-mix(in srgb, var(--good) 8%, transp
   border: 1.5px dashed var(--axis); border-radius: 10px; padding: 22px; text-align: center;
   color: var(--text-secondary); background: var(--plane); cursor: pointer;
 }
-.dropzone:hover { border-color: var(--brand-accent); color: var(--text-primary); }
+.dropzone:hover, .dropzone.over { border-color: var(--brand-accent); color: var(--text-primary); }
+.dropzone.over { background: color-mix(in srgb, var(--brand-accent) 8%, var(--plane)); }
 .dropzone strong { display: block; margin-bottom: 4px; color: var(--text-primary); font-size: 14px; }
 .dropzone span { font-size: 12px; color: var(--text-muted); }
 pre.sql {
@@ -348,6 +349,26 @@ td .mix-in:focus { outline: 2px solid var(--brand-accent); outline-offset: -1px;
 .modal-err { min-height: 18px; margin: 2px 0 0; font-size: 12px; color: var(--critical); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .add-btn { border-style: dashed !important; color: var(--text-muted); }
+
+/* ── ON/OFF 스위치 ───────────────────────────────────────────── */
+.pw-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 2px; border-bottom: 1px solid var(--grid); font-size: 13px;
+}
+.pw-row:last-child { border-bottom: 0; }
+.pw-row .state { color: var(--text-muted); font-size: 12px; margin-left: auto; margin-right: 10px; }
+.switch {
+  position: relative; width: 42px; height: 24px; flex: none; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 99px; background: var(--grid); padding: 0;
+  transition: background .15s;
+}
+.switch span {
+  position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--surface-1); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s;
+}
+.switch[aria-checked="true"] { background: var(--good); border-color: transparent; }
+.switch[aria-checked="true"] span { transform: translateX(18px); }
+.switch:disabled { opacity: .5; cursor: not-allowed; }
 .lock-sub { margin: -8px 0 16px; font-size: 12.5px; color: var(--text-secondary); }
 .lock-contact {
   margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border);
@@ -433,6 +454,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
       <span class="sep"></span>
       <label class="inline" id="brand-label">사업</label>
       <span id="brand-chips"></span>
+      <button class="chip" id="brand-power-btn">사업 ON/OFF</button>
       <select id="brand-select" class="hide"></select>
       <span class="sep" id="ch-sep"></span>
       <label class="inline" id="ch-label">매체</label>
@@ -441,6 +463,15 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
 
     <!-- ══ 경영 대시보드 ══════════════════════════════════════ -->
     <section id="page-exec">
+      <div class="card hide" id="brand-power-card">
+        <div class="card-head">
+          <div><h3>사업 ON/OFF</h3>
+            <p class="cap">끄면 이 대시보드에서 빠집니다. 데이터와 다른 화면은 그대로입니다</p></div>
+          <div class="tools"><button class="btn" id="brand-power-close">닫기</button></div>
+        </div>
+        <div id="brand-power-list"></div>
+      </div>
+
       <div class="tiles" id="exec-tiles"></div>
 
       <div class="grid2">
@@ -605,9 +636,11 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
               <p class="cap">양식이 없으면 먼저 템플릿을 받아 채워 오세요</p></div>
             <div class="tools"><button class="btn" id="tpl-download">템플릿 받기</button></div>
           </div>
+          <input type="file" id="file-input" accept=".xlsx,.xls,.csv" hidden>
           <div class="dropzone" id="dropzone">
-            <strong>엑셀 파일을 여기에 놓거나 클릭해서 선택</strong>
-            <span>.xlsx · (RAW)사업명 시트 인식 · 73컬럼을 일자×매체 행으로 변환</span>
+            <strong>파일을 여기에 놓거나 클릭해서 선택</strong>
+            <span>.xlsx · .csv · 원본 (RAW)사업 시트는 자동으로 일자×매체 행으로 풉니다.
+            템플릿 CSV 는 지금 보고 있는 시트로 들어갑니다</span>
           </div>
           <div id="upload-preview" class="hide" style="margin-top:14px"></div>
         </div>
@@ -707,11 +740,16 @@ async function sbFetch(path, opts = {}) {
   return body;
 }
 
-function saveSession(j, email) {
+/* 액세스 토큰은 1시간마다 갱신되지만, 로그인 자체는 6시간이 지나면 끊는다.
+   공용 PC 에 켜 둔 채로 자리를 뜨는 경우를 막기 위한 상한선이다. */
+const MAX_SESSION_MS = 6 * 60 * 60 * 1000;
+
+function saveSession(j, email, loginAt) {
   SB.token = j.access_token;
   localStorage.setItem(SESSION_KEY, JSON.stringify({
     token: j.access_token, refresh: j.refresh_token, email,
     exp: Date.now() + (j.expires_in || 3600) * 1000 - 60000,
+    loginAt: loginAt || Date.now(),
   }));
 }
 
@@ -728,17 +766,26 @@ async function sbRestore() {
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   const s = JSON.parse(raw);
+  if (Date.now() - (s.loginAt || 0) > MAX_SESSION_MS) { sbSignOut(); return null; }
   if (Date.now() < s.exp) { SB.token = s.token; return s; }
   try {
     const j = await sbFetch("/auth/v1/token?grant_type=refresh_token", {
       method: "POST", body: JSON.stringify({ refresh_token: s.refresh }),
     });
-    saveSession(j, s.email);
+    saveSession(j, s.email, s.loginAt);          // 로그인 시각은 갱신하지 않는다
     return { ...s, token: j.access_token };
   } catch {
-    localStorage.removeItem(SESSION_KEY);
+    sbSignOut();
     return null;
   }
+}
+
+/** 6시간이 지났으면 화면에서 바로 끊는다 */
+function sessionExpired() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return true;
+  try { return Date.now() - (JSON.parse(raw).loginAt || 0) > MAX_SESSION_MS; }
+  catch { return true; }
 }
 
 function sbSignOut() {
@@ -1750,6 +1797,8 @@ function render() {
   $("#brand-chips").classList.toggle("hide", !isExec);
   $("#brand-select").classList.toggle("hide", !isAds);
   $("#brand-label").classList.toggle("hide", state.page === "input");   // 입력 페이지는 자체 사업 탭을 쓴다
+  $("#brand-power-btn").classList.toggle("hide", !isExec);
+  if (!isExec) $("#brand-power-card").classList.add("hide");
   $("#ch-sep").classList.toggle("hide", !isAds);
   $("#ch-label").classList.toggle("hide", !isAds);
   $("#channel-chips").classList.toggle("hide", !isAds);
@@ -1866,13 +1915,21 @@ $("#login-form").addEventListener("submit", async e => {
     btn.textContent = label;
   }
 });
-$("#logout").onclick = () => {
+function leaveApp(msg) {
   sbSignOut();
   gotoPage("exec");            // 잠긴 구역을 열어 둔 채로 나가지 않는다
   $("#pw").value = "";
   $("#app").hidden = true;
   $("#login").hidden = false;
-};
+  loginError(msg || "");
+}
+$("#logout").onclick = () => leaveApp();
+
+/* 열어 둔 채로 6시간이 지나면 끊는다 */
+setInterval(() => {
+  if (!$("#app").hidden && SB && sessionExpired())
+    leaveApp("6시간이 지나 자동으로 로그아웃되었습니다. 다시 로그인해 주세요.");
+}, 60000);
 $("#theme-toggle").onclick = () => {
   const dark = document.documentElement.getAttribute("data-theme") === "dark"
     || (!document.documentElement.hasAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -2072,22 +2129,277 @@ $("#tpl-download").onclick = () => {
   toast(`${cfg.title} 템플릿을 내려받았습니다`);
 };
 
-$("#dropzone").onclick = () => {
+/* ══ 파일 업로드 ══════════════════════════════════════════════
+   CSV 는 직접 파싱하고, xlsx 는 필요할 때만 SheetJS 를 내려받는다.
+   두 가지 모양을 받는다.
+     · wide  — 원본 엑셀 (RAW)사업 시트. DATE + {사업}_{매체}_{캠페인}_{지표} 73컬럼
+     · long  — 이 화면에서 내려받은 CSV 템플릿 (현재 시트의 컬럼 그대로) */
+const SHEETJS_SRC = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+let sheetJsPromise = null;
+function loadSheetJS() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  sheetJsPromise ||= new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = SHEETJS_SRC;
+    s.onload = () => ok(window.XLSX);
+    s.onerror = () => fail(new Error("엑셀 파서를 내려받지 못했습니다. 인터넷 연결을 확인하거나 CSV 로 올려 주세요."));
+    document.head.append(s);
+  });
+  return sheetJsPromise;
+}
+
+/** 따옴표 안의 쉼표와 줄바꿈을 지킨다 */
+function parseCSV(text) {
+  const rows = [[]];
+  let cell = "", q = false;
+  text = text.replace(/^﻿/, "");
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { rows[rows.length - 1].push(cell); cell = ""; }
+    else if (c === "\n") { rows[rows.length - 1].push(cell); cell = ""; rows.push([]); }
+    else if (c !== "\r") cell += c;
+  }
+  rows[rows.length - 1].push(cell);
+  return rows.filter(r => r.some(v => String(v).trim() !== ""));
+}
+
+async function readSheets(file) {
+  if (/\.csv$/i.test(file.name)) return { [file.name]: parseCSV(await file.text()) };
+  const XLSX = await loadSheetJS();
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+  const out = {};
+  for (const n of wb.SheetNames)
+    out[n] = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null });
+  return out;
+}
+
+const toISO = v => {
+  if (v == null || v === "") return null;
+  if (v instanceof Date)
+    return new Date(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate())).toISOString().slice(0, 10);
+  const s = String(v).trim().replace(/[./]/g, "-");
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : null;
+};
+const toMonth = v => {
+  const s = String(v == null ? "" : v).trim().replace(/[./]/g, "-");
+  const m = s.match(/^(\d{4})-(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}` : null;
+};
+
+/* 원본 엑셀의 wide 시트 → ad_daily 행 */
+const WIDE_METRIC = { Impressions: "imp", Clicks: "clk", Adcost: "cost",
+                      Conversion: "cv", "Conversion value": "rev" };
+function parseWide(grid, errors) {
+  const header = grid[0].map(h => (h == null ? "" : String(h).trim()));
+  const cols = header.slice(1).map(h => {
+    const p = h.split("_");
+    return p.length < 4 ? null : { b: p[0], p: `${p[1]}_${p[2]}`, m: p.slice(3).join("_") };
+  });
+  const byKey = new Map();
+  for (let i = 1; i < grid.length; i++) {
+    const d = toISO(grid[i][0]);
+    if (!d) continue;
+    cols.forEach((c, j) => {
+      if (!c) return;
+      const field = WIDE_METRIC[c.m];
+      if (!field) return;                       // CTR·CPC·CPA·ROAS 는 파생이라 버린다
+      const v = grid[i][j + 1];
+      if (v == null || v === "" || v === "-") return;
+      const n = Number(String(v).replace(/,/g, ""));
+      if (!isFinite(n)) { errors.push(`${d} ${header[j + 1]}: 숫자가 아님 (${v})`); return; }
+      const k = `${d}|${c.b}|${c.p}`;
+      if (!byKey.has(k)) byKey.set(k, { d, b: c.b, p: c.p, imp: 0, clk: 0, cost: 0, cv: 0, rev: 0 });
+      byKey.get(k)[field] = n;
+    });
+  }
+  const rows = [...byKey.values()].filter(r => r.imp || r.clk || r.cost || r.cv || r.rev);
+  for (const r of rows) {
+    if (!B_BY[r.b]) errors.push(`등록되지 않은 사업 코드: ${r.b}`);
+    if (!P_BY[r.p]) errors.push(`등록되지 않은 매체 코드: ${r.p}`);
+  }
+  return rows.filter(r => B_BY[r.b] && P_BY[r.p]);
+}
+
+/* 템플릿 CSV/시트 → 현재 시트 행 */
+function parseLong(cfg, grid, errors) {
+  const cols = cfg.cols.filter(c => !c.calc);
+  const header = grid[0].map(h => String(h == null ? "" : h).trim());
+  const idx = {};
+  for (const c of cols) {
+    const i = header.findIndex(h => h === c.label || h === c.k);
+    if (i >= 0) idx[c.k] = i;
+  }
+  const optional = new Set(["rf"]);             // 환불은 없어도 0 으로 본다
+  const missing = cols.filter(c => !optional.has(c.k) && !(c.k in idx));
+  if (missing.length) {
+    errors.push("필요한 열이 없습니다: " + missing.map(c => c.label).join(", "));
+    return [];
+  }
+  const out = [];
+  for (let i = 1; i < grid.length; i++) {
+    const raw = grid[i];
+    const row = {};
+    let bad = null;
+    for (const c of cols) {
+      if (!(c.k in idx)) { row[c.k] = 0; continue; }
+      const v = raw[idx[c.k]];
+      if (c.type === "date") {
+        row[c.k] = toISO(v);
+        if (!row[c.k]) bad = `${i + 1}행: 날짜를 읽을 수 없음 (${v})`;
+      } else if (c.k === "m") {
+        row[c.k] = toMonth(v);
+        if (!row[c.k]) bad = `${i + 1}행: 월을 읽을 수 없음 (${v})`;
+      } else if (c.type === "select") {
+        const t = String(v == null ? "" : v).trim();
+        const hit = optsOf(c).find(o => o[0] === t || o[1] === t);
+        if (!hit) bad = `${i + 1}행: 등록되지 않은 ${c.label} (${v})`;
+        else row[c.k] = hit[0];
+      } else {
+        const n = Number(String(v == null ? "" : v).replace(/[^\d.-]/g, ""));
+        row[c.k] = isFinite(n) ? n : 0;
+      }
+    }
+    if (bad) errors.push(bad); else out.push(row);
+  }
+  return out;
+}
+
+/** 파일 모양을 보고 어느 시트로 넣을지 정한다 */
+function buildUpload(sheets, errors) {
+  const wideNames = Object.keys(sheets).filter(n => {
+    const g = sheets[n];
+    return g.length > 1 && String(g[0][0] == null ? "" : g[0][0]).trim().toUpperCase() === "DATE"
+      && String(g[0][1] == null ? "" : g[0][1]).split("_").length >= 4;
+  });
+  if (wideNames.length) {
+    const rows = wideNames.flatMap(n => parseWide(sheets[n], errors));
+    return { sheetKey: "ads", rows, from: wideNames.join(", ") };
+  }
+  const name = Object.keys(sheets)[0];
+  return { sheetKey: state.sheet, rows: parseLong(SHEETS[state.sheet], sheets[name], errors), from: name };
+}
+
+const rowKey = (sheetKey, r) => sheetKey === "ads" ? `${r.d}|${r.b}|${r.p}`
+  : sheetKey === "biz" ? `${r.d}|${r.b}` : `${r.m}|${r.b}|${r.p}`;
+
+async function handleUpload(file) {
   const box = $("#upload-preview");
   box.classList.remove("hide");
+  box.innerHTML = `<p class="empty">${file.name} 읽는 중…</p>`;
+  const errors = [];
+  let parsed;
+  try {
+    parsed = buildUpload(await readSheets(file), errors);
+  } catch (err) {
+    box.innerHTML = `<div class="banner" style="border-left-color:var(--critical);margin:0">
+      <div><b>읽기 실패</b><br>${err.message}</div></div>`;
+    return;
+  }
+
+  const cfg = SHEETS[parsed.sheetKey];
+  if (!parsed.rows.length) {
+    box.innerHTML = `<div class="banner" style="border-left-color:var(--critical);margin:0">
+      <div><b>넣을 행이 없습니다</b> — ${parsed.from}
+      ${errors.length ? "<br>" + errors.slice(0, 5).join("<br>") : ""}</div></div>`;
+    return;
+  }
+
+  const existing = new Set(cfg.data.map(r => rowKey(parsed.sheetKey, r)));
+  const fresh = parsed.rows.filter(r => !existing.has(rowKey(parsed.sheetKey, r))).length;
+  const dates = parsed.rows.map(r => r.d || r.m).filter(Boolean).sort();
+  const brands = [...new Set(parsed.rows.map(r => r.b))].map(brandKo);
+
   box.innerHTML =
-    `<div class="banner" style="border-left-color:var(--good);margin:0">
-       <span>✓</span>
-       <div><b>미리보기 (프로토타입 목업)</b><br>
-       <code>(RAW)Learnershigh</code> 시트 인식 · 73컬럼 → 일자×매체 <b>911행</b>으로 변환 ·
-       신규 24행 / 갱신 887행 / 오류 0행 · 값이 <code>-</code>인 셀은 NULL 처리</div>
+    `<div class="banner" style="border-left-color:var(--${errors.length ? "warning" : "good"});margin:0">
+       <div><b>${file.name}</b> · ${parsed.from} → <b>${cfg.title}</b> (${cfg.table})<br>
+       ${num(parsed.rows.length)}행 · 신규 ${num(fresh)} / 갱신 ${num(parsed.rows.length - fresh)}
+       ${errors.length ? ` / <span style="color:var(--critical)">건너뜀 ${num(errors.length)}</span>` : ""}
+       ${dates.length ? `<br>${dates[0]} ~ ${dates[dates.length - 1]}` : ""}
+       ${brands.length ? ` · ${brands.join(", ")}` : ""}
+       ${errors.length ? `<br><span style="color:var(--text-muted)">${errors.slice(0, 5).join("<br>")}`
+          + (errors.length > 5 ? `<br>… 외 ${num(errors.length - 5)}건` : "") + "</span>" : ""}</div>
      </div>
      <div style="margin-top:10px;display:flex;gap:8px">
-       <button class="btn solid" id="confirm-up">911행 업로드</button>
+       <button class="btn solid" id="confirm-up">${num(parsed.rows.length)}행 반영</button>
        <button class="btn" id="cancel-up">취소</button></div>`;
-  $("#confirm-up").onclick = () => { toast("실제 구현 시 ad_daily 로 upsert됩니다"); box.classList.add("hide"); };
+
   $("#cancel-up").onclick = () => box.classList.add("hide");
+  $("#confirm-up").onclick = async () => {
+    const btn = $("#confirm-up");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "반영 중…";
+    try {
+      if (SB) {
+        const payload = parsed.rows.map(cfg.toRow);
+        for (let i = 0; i < payload.length; i += 500)
+          await sbUpsert(cfg.table, payload.slice(i, i + 500), cfg.conflict);
+        await logUpload(file.name, parsed.rows.length, cfg.table);
+        await loadData();
+      } else {
+        for (const r of parsed.rows) {          // Supabase 없이 볼 때는 메모리에만
+          const k = rowKey(parsed.sheetKey, r);
+          const hit = cfg.data.find(x => rowKey(parsed.sheetKey, x) === k);
+          if (hit) Object.assign(hit, r); else cfg.data.push(r);
+        }
+        recomputeDates();
+      }
+      box.classList.add("hide");
+      toast(`${cfg.table} ${num(parsed.rows.length)}행 반영 완료`);
+      buildFilters();
+      render();
+    } catch (err) {
+      toast("반영 실패: " + err.message);
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  };
+}
+
+async function logUpload(filename, rowCount, table) {
+  try {
+    await sbFetch("/rest/v1/upload_logs", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify([{ filename, row_count: rowCount, note: table }]),
+    });
+  } catch { /* 이력 기록이 실패해도 업로드 자체는 막지 않는다 */ }
+  await renderUploadLogs();
+}
+
+async function renderUploadLogs() {
+  const cols = [["일시", r => r[0]], ["파일", r => r[1]], ["행", r => r[2]], ["대상", r => r[3]]];
+  let rows = [];
+  if (SB) {
+    try {
+      rows = (await sbSelect("upload_logs",
+        "select=uploaded_at,filename,row_count,note&order=uploaded_at.desc&limit=20"))
+        .map(r => [String(r.uploaded_at).replace("T", " ").slice(0, 16),
+                   r.filename, num(r.row_count), r.note || "-"]);
+    } catch { rows = []; }
+  }
+  renderUploadLogs();
+  e.target.value = "";                          // 같은 파일을 다시 골라도 동작하게
 };
+$("#dropzone").onclick = () => $("#file-input").click();
+["dragenter", "dragover"].forEach(ev => $("#dropzone").addEventListener(ev, e => {
+  e.preventDefault();
+  $("#dropzone").classList.add("over");
+}));
+["dragleave", "drop"].forEach(ev => $("#dropzone").addEventListener(ev, e => {
+  e.preventDefault();
+  $("#dropzone").classList.remove("over");
+}));
+$("#dropzone").addEventListener("drop", e => {
+  const f = e.dataTransfer.files[0];
+  if (f) handleUpload(f);
+});
 
 let rt;
 addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (!$("#app").hidden) render(); }, 150); });
@@ -2157,13 +2469,45 @@ $("#modal-form").addEventListener("submit", async e => {
 const liveBrands = () => BRANDS.filter(b => b.active !== false);
 
 async function setBrandActive(code, active) {
+  // 전부 끄면 대시보드가 빈 화면이 된다. 마지막 하나는 남긴다
+  if (!active && liveBrands().length <= 1) throw new Error("마지막 사업은 끌 수 없습니다.");
   if (SB) await sbUpsert("brands", [{ code, name_ko: B_BY[code].ko, active }], "code");
   B_BY[code].active = active;
   if (active) state.brands.add(code); else state.brands.delete(code);
   if (!state.brands.size && liveBrands().length) state.brands.add(liveBrands()[0].code);
   buildFilters();
   renderBrandAdmin();
+  renderBrandPower();
   render();
+}
+
+/* 경영 대시보드용 ON/OFF 패널.
+   꺼진 사업은 대시보드에서 사라지므로, 다시 켤 수 있도록 여기에는 전부 남겨 둔다. */
+function renderBrandPower() {
+  const host = $("#brand-power-list");
+  if (!host) return;
+  const onCount = liveBrands().length;
+  host.innerHTML = "";
+  for (const b of BRANDS) {
+    const on = b.active !== false;
+    host.append(el("div", { class: "pw-row", html:
+      `<span class="cell-name"><i style="background:${slotCss(b.slot)}"></i>${b.ko}</span>
+       <span class="state">${on ? "대시보드에 표시" : "숨김"}</span>
+       <button class="switch" role="switch" aria-checked="${on}" data-power="${b.code}"
+         ${on && onCount === 1 ? "disabled title='마지막 사업은 끌 수 없습니다'" : ""}><span></span></button>` }));
+  }
+  host.querySelectorAll("[data-power]").forEach(btn => btn.onclick = async () => {
+    const code = btn.dataset.power;
+    const on = B_BY[code].active !== false;
+    btn.disabled = true;
+    try {
+      await setBrandActive(code, !on);
+      toast(`${B_BY[code].ko} ${on ? "숨김" : "표시"}`);
+    } catch (err) {
+      toast("변경 실패: " + err.message);
+      btn.disabled = false;
+    }
+  });
 }
 
 function renderBrandAdmin() {
@@ -2221,6 +2565,18 @@ function buildFilters() {
     `<option value="${b.code}"${b.code === state.brand ? " selected" : ""}${withAds.has(b.code) ? "" : " disabled"}>`
     + `${b.ko}${b.active === false ? " (종료)" : ""}${withAds.has(b.code) ? "" : " (데이터 없음)"}</option>`).join("");
   $("#brand-select").onchange = e => { state.brand = e.target.value; render(); };
+
+$("#brand-power-btn").onclick = () => {
+  const card = $("#brand-power-card");
+  const show = card.classList.contains("hide");
+  card.classList.toggle("hide", !show);
+  $("#brand-power-btn").setAttribute("aria-pressed", String(show));
+  if (show) renderBrandPower();
+};
+$("#brand-power-close").onclick = () => {
+  $("#brand-power-card").classList.add("hide");
+  $("#brand-power-btn").setAttribute("aria-pressed", "false");
+};
 
   $("#channel-chips").innerHTML = PLATFORMS.map(p =>
     `<button class="chip ent" data-ch="${p.code}" aria-pressed="${state.channels.has(p.code)}">
@@ -2280,6 +2636,7 @@ function boot() {
   buildFilters();
 
   renderBrandAdmin();
+  renderBrandPower();
   simpleTable($("#log-table"), [["일시", r => r[0]], ["파일", r => r[1]], ["행", r => r[2]], ["사용자", r => r[3]]], [
     ["2026-09-16 09:12", "Ads RAW Data.xlsx", "911", "marketing@"],
     ["2026-09-09 09:05", "Ads RAW Data.xlsx", "874", "marketing@"],
