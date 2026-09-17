@@ -691,7 +691,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
       <input id="m-ko" required maxlength="40" placeholder="예: 내일하이">
     </div>
     <div class="field">
-      <label for="m-code">코드 <span class="hint">영문·숫자·밑줄. 저장 후에는 바꿀 수 없습니다</span></label>
+      <label for="m-code">코드 <span class="hint" id="m-code-hint">영문·숫자·밑줄</span></label>
       <input id="m-code" required maxlength="40" pattern="[A-Za-z0-9_]+" placeholder="예: Learnershigh">
     </div>
     <div class="field" id="m-channel-wrap" hidden>
@@ -2384,7 +2384,15 @@ async function renderUploadLogs() {
                    r.filename, num(r.row_count), r.note || "-"]);
     } catch { rows = []; }
   }
-  renderUploadLogs();
+  simpleTable($("#log-table"), cols, rows);
+  if (!rows.length) {
+    $("#log-table").append(el("tbody", {}, el("tr", { html:
+      `<td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px">업로드 기록 없음</td>` })));
+  }
+}
+
+$("#file-input").onchange = e => {
+  if (e.target.files[0]) handleUpload(e.target.files[0]);
   e.target.value = "";                          // 같은 파일을 다시 골라도 동작하게
 };
 $("#dropzone").onclick = () => $("#file-input").click();
@@ -2406,19 +2414,65 @@ addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if 
 
 /* ══ 사업 · 매체 추가 ═════════════════════════════════════════ */
 let modalKind = "brand";
+let editingCode = null;          // null 이면 추가, 값이 있으면 그 사업을 수정
 
-function openMaster(kind) {
+function openMaster(kind, code) {
   modalKind = kind;
+  editingCode = code || null;
   const isBrand = kind === "brand";
-  $("#modal-title").textContent = isBrand ? "사업 추가" : "매체 추가";
+  const editing = Boolean(code);
+  $("#modal-title").textContent =
+    (isBrand ? "사업 " : "매체 ") + (editing ? "수정" : "추가");
   $("#m-ko-label").textContent = isBrand ? "사업명" : "매체명";
   $("#m-ko").placeholder = isBrand ? "예: 내일하이" : "예: 카카오 모먼트";
   $("#m-code").placeholder = isBrand ? "예: Learnershigh" : "예: Kakao_moment";
   $("#m-channel-wrap").hidden = isBrand;
-  $("#m-ko").value = $("#m-code").value = $("#m-channel").value = "";
+  $("#m-ko").value = editing ? B_BY[code].ko : "";
+  $("#m-code").value = editing ? code : "";
+  $("#m-channel").value = "";
+  $("#m-code-hint").textContent = editing
+    ? "바꾸면 이 사업의 광고·사업실적·예산 데이터가 모두 새 코드로 따라갑니다"
+    : "영문·숫자·밑줄. 저장 후에도 바꿀 수 있습니다";
+  $("#modal-ok").textContent = editing ? "저장" : "추가";
   $("#modal-err").textContent = "";
   $("#modal").hidden = false;
   $("#m-ko").focus();
+}
+
+/** 이름·코드 변경. 코드는 PK 라 ON UPDATE CASCADE 로 자식 행이 따라온다. */
+async function editBrand(oldCode, newCode, ko) {
+  if (!ko) throw new Error("사업명을 입력하세요.");
+  if (newCode !== oldCode && B_BY[newCode]) throw new Error("이미 쓰고 있는 코드입니다.");
+  if (SB) {
+    const r = await fetch(`${SB.url}/rest/v1/brands?code=eq.${encodeURIComponent(oldCode)}`, {
+      method: "PATCH",
+      headers: { apikey: SB.key, Authorization: `Bearer ${SB.token}`,
+                 "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ code: newCode, name_ko: ko }),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(/foreign key|violates/i.test(t)
+        ? "코드를 바꾸려면 supabase/04_rename_cascade.sql 을 먼저 실행해 주세요."
+        : (t || r.statusText).slice(0, 200));
+    }
+    await loadData();                       // 코드가 바뀌었으니 전부 다시 읽는다
+  } else {
+    const b = B_BY[oldCode];
+    b.ko = ko;
+    b.code = newCode;
+    for (const arr of [ADS, BIZ, BUDGET])
+      arr.forEach(r => { if (r.b === oldCode) r.b = newCode; });
+    reindexMaster();
+  }
+  // 코드를 가리키고 있던 선택 상태를 옮긴다
+  if (state.brand === oldCode) state.brand = newCode;
+  if (state.brands.delete(oldCode)) state.brands.add(newCode);
+  if (state.sheetBrand === oldCode) state.sheetBrand = newCode;
+  if (mix.brand === oldCode) mix.brand = newCode;
+  buildFilters();
+  renderBrandAdmin();
+  renderBrandPower();
 }
 const closeMaster = () => { $("#modal").hidden = true; };
 
@@ -2453,9 +2507,14 @@ $("#modal-form").addEventListener("submit", async e => {
   const btn = $("#modal-ok");
   btn.disabled = true;
   try {
-    await addMaster(modalKind, code, ko, $("#m-channel").value.trim());
+    if (editingCode) {
+      await editBrand(editingCode, code, ko);
+      toast(`'${ko}' 로 수정했습니다`);
+    } else {
+      await addMaster(modalKind, code, ko, $("#m-channel").value.trim());
+      toast(`${modalKind === "brand" ? "사업" : "매체"} '${ko}' 추가`);
+    }
     closeMaster();
-    toast(`${modalKind === "brand" ? "사업" : "매체"} '${ko}' 추가`);
     render();
   } catch (err) {
     $("#modal-err").textContent = err.message;
@@ -2519,7 +2578,7 @@ function renderBrandAdmin() {
   const host = $("#brand-admin");
   host.innerHTML = "";
   host.append(el("thead", {}, el("tr", { html:
-    ["사업", "코드", "광고 행", "사업실적 행", "상태", ""].map(h => `<th>${h}</th>`).join("") })));
+    ["사업", "코드", "광고 행", "사업실적 행", "상태", "관리"].map(h => `<th>${h}</th>`).join("") })));
   const body = el("tbody");
   for (const r of rows) {
     const on = r.active !== false;
@@ -2527,10 +2586,14 @@ function renderBrandAdmin() {
       `<td><span class="cell-name"><i style="background:${slotCss(r.slot)}"></i>${r.ko}</span></td>
        <td>${r.code}</td><td>${num(r.ads)}</td><td>${num(r.biz)}</td>
        <td><span class="badge"><i style="color:var(--${on ? "good" : "text-muted"})">●</i>${on ? "운영 중" : "종료"}</span></td>
-       <td><button class="btn" data-toggle-brand="${r.code}">${on ? "종료" : "재개"}</button></td>` });
+       <td style="white-space:nowrap">
+         <button class="btn" data-edit-brand="${r.code}">수정</button>
+         <button class="btn" data-toggle-brand="${r.code}">${on ? "종료" : "재개"}</button></td>` });
     body.append(tr);
   }
   host.append(body);
+  host.querySelectorAll("[data-edit-brand]").forEach(btn =>
+    btn.onclick = () => openMaster("brand", btn.dataset.editBrand));
   host.querySelectorAll("[data-toggle-brand]").forEach(btn => btn.onclick = async () => {
     const code = btn.dataset.toggleBrand;
     const on = B_BY[code].active !== false;
@@ -2637,11 +2700,7 @@ function boot() {
 
   renderBrandAdmin();
   renderBrandPower();
-  simpleTable($("#log-table"), [["일시", r => r[0]], ["파일", r => r[1]], ["행", r => r[2]], ["사용자", r => r[3]]], [
-    ["2026-09-16 09:12", "Ads RAW Data.xlsx", "911", "marketing@"],
-    ["2026-09-09 09:05", "Ads RAW Data.xlsx", "874", "marketing@"],
-    ["2026-09-02 10:41", "Ads RAW Data.xlsx", "836", "ads@"],
-  ]);
+  renderUploadLogs();
   render();
 }
 
