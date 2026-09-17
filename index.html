@@ -169,8 +169,9 @@ input[type="date"] { font-variant-numeric: tabular-nums; }
 .banner b { color: var(--text-primary); }
 
 /* ── 스탯 타일 ───────────────────────────────────────────────── */
-.tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 12px; }
-.tiles.five { grid-template-columns: repeat(5, 1fr); }
+/* 타일 수가 화면마다 달라서 폭에 맞춰 접히게 둔다 */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(152px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.tiles.five { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .tile {
   background: var(--surface-1); border: 1px solid var(--border);
   border-radius: 10px; padding: 13px 15px 11px;
@@ -362,7 +363,6 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
 .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 1180px) {
-  .tiles, .tiles.five { grid-template-columns: repeat(3, 1fr); }
   .grid2, .grid2.even { grid-template-columns: 1fr; }
   #app { grid-template-columns: 1fr; }
   aside { flex-direction: row; align-items: center; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
@@ -446,7 +446,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
       <div class="grid2">
         <div class="card">
           <div class="card-head">
-            <div><h3>사업별 일별 매출</h3></div>
+            <div><h3>사업별 일별 최종매출</h3><p class="cap">매출 − 환불</p></div>
             <div class="tools"><button class="toggle-table" data-tt="rev">표로 보기</button></div>
           </div>
           <div class="legend" id="rev-legend"></div>
@@ -455,7 +455,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
         </div>
         <div class="card">
           <div class="card-head">
-            <div><h3>사업별 매출</h3><p class="cap">괄호는 ROAS</p></div>
+            <div><h3>사업별 최종매출</h3><p class="cap">괄호는 ROAS</p></div>
             <div class="tools"><button class="toggle-table" data-tt="brev">표로 보기</button></div>
           </div>
           <div class="plot" id="brev-plot"></div>
@@ -479,7 +479,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
       <div class="card">
         <div class="card-head"><div>
           <h3>사업별 성과</h3>
-          <p class="cap">ROAS = 매출 ÷ 광고비 · CAC = 광고비 ÷ 결제수</p>
+          <p class="cap">최종매출 = 매출 − 환불 · ROAS = 최종매출 ÷ 광고비 · CAC = 광고비 ÷ 결제수</p>
         </div></div>
         <div style="overflow-x:auto"><table id="exec-table"></table></div>
       </div>
@@ -867,20 +867,29 @@ function toast(msg) {
 }
 
 /* 파생지표는 반드시 합계에서 재계산한다 — 일별 값을 평균내면 틀린다 */
-const zero = () => ({ imp: 0, clk: 0, cost: 0, cv: 0, rev: 0, su: 0, od: 0, rvz: 0, budget: 0 });
+const zero = () => ({ imp: 0, clk: 0, cost: 0, cv: 0, rev: 0,
+                      su: 0, od: 0, rvz: 0, rfd: 0, budget: 0 });
 function addAd(a, r) { a.imp += r.imp; a.clk += r.clk; a.cost += r.cost; a.cv += r.cv; a.rev += r.rev; return a; }
-function addBiz(a, r) { a.su += r.su; a.od += r.od; a.rvz += r.rv; return a; }
-const derive = a => ({
-  ...a,
-  ctr:  a.imp ? a.clk / a.imp : NaN,
-  cpc:  a.clk ? a.cost / a.clk : NaN,
-  cpa:  a.cv ? a.cost / a.cv : NaN,
-  roasAd: a.cost ? a.rev / a.cost : NaN,        // 광고 플랫폼 기준
-  roas: a.cost ? a.rvz / a.cost : NaN,          // admin 실매출 기준
-  cac:  a.od ? a.cost / a.od : NaN,
-  aov:  a.od ? a.rvz / a.od : NaN,
-  used: a.budget ? a.cost / a.budget : NaN,
-});
+function addBiz(a, r) { a.su += r.su; a.od += r.od; a.rvz += r.rv; a.rfd += (r.rf || 0); return a; }
+
+/* rvz=매출(총), rfd=환불, net=최종매출.
+   최종매출은 저장하지 않고 항상 여기서 뺀다. 환불이 정정돼도 어긋나지 않는다. */
+const derive = a => {
+  const net = a.rvz - a.rfd;
+  return {
+    ...a,
+    net,
+    ctr:  a.imp ? a.clk / a.imp : NaN,
+    cpc:  a.clk ? a.cost / a.clk : NaN,
+    cpa:  a.cv ? a.cost / a.cv : NaN,
+    roasAd: a.cost ? a.rev / a.cost : NaN,      // 광고 플랫폼이 잡은 전환매출 기준
+    roas: a.cost ? net / a.cost : NaN,          // admin 최종매출 기준
+    cac:  a.od ? a.cost / a.od : NaN,
+    aov:  a.od ? net / a.od : NaN,
+    rfdRate: a.rvz ? a.rfd / a.rvz : NaN,
+    used: a.budget ? a.cost / a.budget : NaN,
+  };
+};
 
 function setPreset(p) {
   state.preset = p;
@@ -1130,7 +1139,8 @@ function simpleTable(host, cols, rows) {
 
 /* ══ 경영 대시보드 ════════════════════════════════════════════ */
 const EXEC_TILES = [
-  { key: "rvz",  label: "매출",     fmt: won,  unit: "원", upGood: true },
+  { key: "net",  label: "최종매출", fmt: won,  unit: "원", upGood: true },
+  { key: "rfd",  label: "환불",     fmt: won,  unit: "원", upGood: false },
   { key: "od",   label: "결제수",   fmt: num,  unit: "건", upGood: true },
   { key: "su",   label: "회원가입", fmt: num,  unit: "명", upGood: true },
   { key: "cost", label: "광고비",   fmt: won,  unit: "원", upGood: null },
@@ -1139,17 +1149,20 @@ const EXEC_TILES = [
 ];
 
 const EXEC_COLS = [
-  { key: "name",   label: "사업",   f: r => `<span class="cell-name"><i style="background:${r.color}"></i>${r.name}</span>`, t: () => "합계" },
-  { key: "budget", label: "예산",   f: r => num(r.budget), t: r => num(r.budget) },
-  { key: "cost",   label: "광고비", f: r => num(r.cost),   t: r => num(r.cost) },
-  { key: "used",   label: "소진율", f: r => pct0(r.used),  t: r => pct0(r.used) },
-  { key: "su",     label: "가입",   f: r => num(r.su),     t: r => num(r.su) },
-  { key: "od",     label: "결제",   f: r => num(r.od),     t: r => num(r.od) },
-  { key: "rvz",    label: "매출",   f: r => num(r.rvz),    t: r => num(r.rvz) },
-  { key: "aov",    label: "객단가", f: r => num(r.aov),    t: r => num(r.aov) },
-  { key: "cac",    label: "CAC",    f: r => num(r.cac),    t: r => num(r.cac) },
-  { key: "roas",   label: "ROAS",   f: r => pct0(r.roas),  t: r => pct0(r.roas) },
-  { key: "st",     label: "상태",   nosort: true, f: r => statusBadge(r.roas, [1, 0.6], ["양호", "주의", "심각"]) },
+  { key: "name",   label: "사업",     f: r => `<span class="cell-name"><i style="background:${r.color}"></i>${r.name}</span>`, t: () => "합계" },
+  { key: "budget", label: "예산",     f: r => num(r.budget), t: r => num(r.budget) },
+  { key: "cost",   label: "광고비",   f: r => num(r.cost),   t: r => num(r.cost) },
+  { key: "used",   label: "소진율",   f: r => pct0(r.used),  t: r => pct0(r.used) },
+  { key: "su",     label: "가입",     f: r => num(r.su),     t: r => num(r.su) },
+  { key: "od",     label: "결제",     f: r => num(r.od),     t: r => num(r.od) },
+  { key: "rvz",    label: "매출",     f: r => num(r.rvz),    t: r => num(r.rvz) },
+  { key: "rfd",    label: "환불",     f: r => num(r.rfd),    t: r => num(r.rfd) },
+  { key: "rfdRate", label: "환불률",  f: r => pct0(r.rfdRate), t: r => pct0(r.rfdRate) },
+  { key: "net",    label: "최종매출", f: r => num(r.net),    t: r => num(r.net) },
+  { key: "aov",    label: "객단가",   f: r => num(r.aov),    t: r => num(r.aov) },
+  { key: "cac",    label: "CAC",      f: r => num(r.cac),    t: r => num(r.cac) },
+  { key: "roas",   label: "ROAS",     f: r => pct0(r.roas),  t: r => pct0(r.roas) },
+  { key: "st",     label: "상태",     nosort: true, f: r => statusBadge(r.roas, [1, 0.6], ["양호", "주의", "심각"]) },
 ];
 
 function renderExec() {
@@ -1168,7 +1181,7 @@ function renderExec() {
 
   const base = biz.reduce(addBiz, ads.reduce(addAd, zero()));
   base.budget = Object.values(budgetBy).reduce((a, b) => a + b, 0);
-  if (!biz.length) base.su = base.od = base.rvz = NaN;   // 0건이 아니라 "아직 없음"
+  if (!biz.length) base.su = base.od = base.rvz = base.rfd = NaN;   // 0건이 아니라 "아직 없음"
   if (!base.budget) base.budget = NaN;
   const cur = derive(base);
   tiles($("#exec-tiles"), EXEC_TILES, cur, prev, `직전 ${len}일`);
@@ -1176,7 +1189,8 @@ function renderExec() {
   /* 사업별 일별 매출 */
   const dates = [...new Set(biz.map(r => r.d))].sort();
   const perBrandDate = {};
-  biz.forEach(r => ((perBrandDate[r.b] ||= {})[r.d] = (perBrandDate[r.b][r.d] || 0) + r.rv));
+  biz.forEach(r => ((perBrandDate[r.b] ||= {})[r.d] =
+    (perBrandDate[r.b][r.d] || 0) + (r.rv - (r.rf || 0))));   // 최종매출 기준
   const series = brands
     .filter(b => Object.keys(perBrandDate[b.code] || {}).length)
     .map(b => ({ name: b.ko, color: brandColor(b.code), values: dates.map(d => (perBrandDate[b.code] || {})[d] || 0) }));
@@ -1196,20 +1210,22 @@ function renderExec() {
   brands.forEach(b => {
     const a = agg[b.code];
     a.budget = budgetBy[b.code] || NaN;
-    if (!hasBiz.has(b.code)) a.su = a.od = a.rvz = NaN;
+    if (!hasBiz.has(b.code)) a.su = a.od = a.rvz = a.rfd = NaN;
     if (!hasAds.has(b.code)) a.imp = a.clk = a.cost = a.cv = a.rev = NaN;
   });
   const rows = brands.map(b => ({
     code: b.code, name: b.ko, color: brandColor(b.code), ...derive(agg[b.code]),
   }));
 
-  const revRows = rows.filter(r => r.rvz > 0).sort((a, b) => b.rvz - a.rvz);
+  const revRows = rows.filter(r => r.net > 0).sort((a, b) => b.net - a.net);
   barsH($("#brev-plot"), {
-    rows: revRows.map(r => ({ label: r.name, value: r.rvz, color: r.color, roas: r.roas })),
+    rows: revRows.map(r => ({ label: r.name, value: r.net, color: r.color, roas: r.roas })),
     note: r => ` (ROAS ${pct0(r.roas)})`,
     empty: "매출 데이터 없음",
   });
-  simpleTable($("#brev-table"), [["사업", r => r.name], ["매출", r => num(r.rvz)], ["광고비", r => num(r.cost)], ["ROAS", r => pct0(r.roas)]], revRows);
+  simpleTable($("#brev-table"), [["사업", r => r.name], ["매출", r => num(r.rvz)],
+    ["환불", r => num(r.rfd)], ["최종매출", r => num(r.net)],
+    ["광고비", r => num(r.cost)], ["ROAS", r => pct0(r.roas)]], revRows);
 
   /* 예산 소진 미터 */
   const mh = $("#budget-meters");
@@ -1371,11 +1387,15 @@ const SHEETS = {
       { k: "b", label: "사업", type: "select", opts: BRAND_OPTS, w: 96 },
       { k: "su", label: "회원가입", type: "num" }, { k: "od", label: "결제수", type: "num" },
       { k: "rv", label: "매출", type: "num" },
+      { k: "rf", label: "환불", type: "num" },
+      // 최종매출은 저장하지 않는다. 매출 - 환불로 그때그때 보여 준다
+      { k: "net", label: "최종매출", type: "num", calc: r => (r.rv || 0) - (r.rf || 0) },
     ],
-    blank: () => ({ d: state.to, b: sheetBrandOr(), su: 0, od: 0, rv: 0 }),
+    blank: () => ({ d: state.to, b: sheetBrandOr(), su: 0, od: 0, rv: 0, rf: 0 }),
     match: r => inRange(r),
     conflict: "date,brand",
-    toRow: r => ({ date: r.d, brand: r.b, signups: r.su, orders: r.od, revenue: r.rv }),
+    toRow: r => ({ date: r.d, brand: r.b, signups: r.su, orders: r.od,
+                   revenue: r.rv, refund: r.rf || 0 }),
   },
   budget: {
     title: "월별 예산", data: BUDGET, table: "budgets",
@@ -1401,6 +1421,7 @@ const dirtyCount = () => [...dirty.values()].reduce((n, s) => n + s.size, 0);
 
 const optsOf = col => (typeof col.opts === "function" ? col.opts() : col.opts);
 const cellText = (row, col) => {
+  if (col.calc) return num(col.calc(row));          // 계산 칸은 저장하지 않고 보여만 준다
   const v = row[col.k];
   if (col.type === "select") return (optsOf(col).find(o => o[0] === v) || [v, v])[1];
   if (col.type === "num") return num(v);
@@ -1458,8 +1479,9 @@ function drawSheet() {
   if (cur) cur.focus({ preventScroll: false });
 }
 
-/* 위에서 사업·매체를 골라 놓았으면 해당 칸은 잠근다 */
+/* 계산 칸, 그리고 위에서 사업·매체를 골라 놓았으면 해당 칸도 잠근다 */
 const isLocked = col =>
+  Boolean(col.calc) ||
   (col.k === "b" && state.sheetBrand !== "*") ||
   (col.k === "p" && state.sheetPlat !== "*");
 
@@ -1746,7 +1768,8 @@ function render() {
 const MAP_IN = {
   ad: r => ({ d: r.date, b: r.brand, p: r.platform, imp: +r.impressions, clk: +r.clicks,
               cost: +r.adcost, cv: +r.conversions, rev: +r.conv_value }),
-  biz: r => ({ d: r.date, b: r.brand, su: +r.signups, od: +r.orders, rv: +r.revenue }),
+  biz: r => ({ d: r.date, b: r.brand, su: +r.signups, od: +r.orders,
+               rv: +r.revenue, rf: +(r.refund || 0) }),
   budget: r => ({ m: String(r.month).slice(0, 7), b: r.brand, p: r.platform, amt: +r.amount }),
 };
 
@@ -2028,7 +2051,8 @@ $("#tpl-download").onclick = () => {
   const cfg = SHEETS[state.sheet];
   const brand = state.sheetBrand === "*" ? BRANDS[0].code : state.sheetBrand;
   const plat = state.sheetPlat === "*" ? PLATFORMS[0].code : state.sheetPlat;
-  const sample = (offset) => cfg.cols.map(c => {
+  const cols = cfg.cols.filter(c => !c.calc);      // 계산 칸은 채울 게 없으니 뺀다
+  const sample = (offset) => cols.map(c => {
     if (c.k === "d") return shiftDate(state.to, -offset);
     if (c.k === "m") return state.to.slice(0, 7);
     if (c.k === "b") return brandKo(brand);
@@ -2036,7 +2060,7 @@ $("#tpl-download").onclick = () => {
     return "";
   });
   const esc = v => (/[",\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v);
-  const lines = [cfg.cols.map(c => c.label), sample(0), sample(1)]
+  const lines = [cols.map(c => c.label), sample(0), sample(1)]
     .map(r => r.map(esc).join(",")).join("\r\n");
 
   const url = URL.createObjectURL(new Blob(["﻿" + lines], { type: "text/csv;charset=utf-8" }));
