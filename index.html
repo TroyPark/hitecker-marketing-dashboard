@@ -721,7 +721,7 @@ const CFG = window.APP_CONFIG || {};
 const SB = CFG.SUPABASE_URL ? { url: CFG.SUPABASE_URL.replace(/\/$/, ""), key: CFG.SUPABASE_ANON_KEY, token: null } : null;
 const SESSION_KEY = "ht_dashboard_session";
 
-async function sbFetch(path, opts = {}) {
+async function rawFetch(path, opts) {
   const r = await fetch(`${SB.url}${path}`, {
     ...opts,
     headers: {
@@ -732,12 +732,49 @@ async function sbFetch(path, opts = {}) {
     },
   });
   const text = await r.text();
-  const body = text ? JSON.parse(text) : null;
+  return { r, body: text ? JSON.parse(text) : null };
+}
+
+async function sbFetch(path, opts = {}) {
+  const isAuth = path.startsWith("/auth/");
+  // 액세스 토큰은 1시간이면 만료된다. 호출 전에 만료가 임박하면 미리 갱신한다.
+  if (!isAuth) await ensureFreshToken();
+  let { r, body } = await rawFetch(path, opts);
+  // 그래도 401 이면 (시계 오차 등) 한 번 더 갱신하고 재시도한다
+  if (r.status === 401 && !isAuth && await refreshToken()) {
+    ({ r, body } = await rawFetch(path, opts));
+  }
   if (!r.ok) {
     const msg = body && (body.error_description || body.msg || body.message || body.hint);
     throw new Error(msg || `${r.status} ${r.statusText}`);
   }
   return body;
+}
+
+/** 저장된 refresh_token 으로 액세스 토큰을 새로 받는다. 성공하면 true. */
+async function refreshToken() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return false;
+  const s = JSON.parse(raw);
+  if (Date.now() - (s.loginAt || 0) > MAX_SESSION_MS) { sbSignOut(); return false; }
+  try {
+    const j = await sbFetch("/auth/v1/token?grant_type=refresh_token", {
+      method: "POST", body: JSON.stringify({ refresh_token: s.refresh }),
+    });
+    saveSession(j, s.email, s.loginAt);          // 로그인 시각(6시간 상한)은 유지
+    return true;
+  } catch {
+    sbSignOut();
+    return false;
+  }
+}
+
+/** 만료 임박이면 갱신한다 (아직 유효하면 아무것도 안 함) */
+async function ensureFreshToken() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return;
+  const s = JSON.parse(raw);
+  if (Date.now() >= s.exp) await refreshToken();
 }
 
 /* 액세스 토큰은 1시간마다 갱신되지만, 로그인 자체는 6시간이 지나면 끊는다.
@@ -768,16 +805,7 @@ async function sbRestore() {
   const s = JSON.parse(raw);
   if (Date.now() - (s.loginAt || 0) > MAX_SESSION_MS) { sbSignOut(); return null; }
   if (Date.now() < s.exp) { SB.token = s.token; return s; }
-  try {
-    const j = await sbFetch("/auth/v1/token?grant_type=refresh_token", {
-      method: "POST", body: JSON.stringify({ refresh_token: s.refresh }),
-    });
-    saveSession(j, s.email, s.loginAt);          // 로그인 시각은 갱신하지 않는다
-    return { ...s, token: j.access_token };
-  } catch {
-    sbSignOut();
-    return null;
-  }
+  return (await refreshToken()) ? JSON.parse(localStorage.getItem(SESSION_KEY)) : null;
 }
 
 /** 6시간이 지났으면 화면에서 바로 끊는다 */
@@ -2444,6 +2472,7 @@ async function editBrand(oldCode, newCode, ko) {
   if (!ko) throw new Error("사업명을 입력하세요.");
   if (newCode !== oldCode && B_BY[newCode]) throw new Error("이미 쓰고 있는 코드입니다.");
   if (SB) {
+    await ensureFreshToken();
     const r = await fetch(`${SB.url}/rest/v1/brands?code=eq.${encodeURIComponent(oldCode)}`, {
       method: "PATCH",
       headers: { apikey: SB.key, Authorization: `Bearer ${SB.token}`,
