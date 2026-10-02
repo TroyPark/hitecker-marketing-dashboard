@@ -1978,13 +1978,24 @@ function parseMixProposal(text) {
 }
 
 function applyMixProposal(prop) {
-  // 총예산이 비어 있으면 AI 가 제안한 총예산을 채운다
-  if (!mix.total && prop.total) { mix.total = prop.total; setTotalInput(prop.total); }
-  if (!mix.total) return toast("총 예산이 없습니다. 위에 총예산을 입력하거나, AI에게 '총예산도 제안해줘'라고 하세요");
+  // 총예산 우선순위: 사용자가 입력한 값 → AI 제안(prop.total) → 전월 집행 합계
+  let total = mix.total || prop.total || 0;
+  let note = "";
+  if (!total) {
+    total = Object.values(prevSpend()).reduce((a, b) => a + b, 0);
+    if (total) note = " (총예산은 전월 집행액 기준)";
+  }
+  if (!total) {
+    toast("총예산을 정할 근거가 없습니다. 위에 총예산을 직접 입력한 뒤 적용하세요");
+    return;
+  }
+  mix.total = total;
+  setTotalInput(total);
   mix.amounts = {};
-  for (const [code, pct] of Object.entries(prop.alloc)) mix.amounts[code] = Math.round(mix.total * pct / 100);
-  renderMix();
-  toast("제안 배분을 믹스에 적용했습니다. '월별 예산에 저장'을 누르세요");
+  for (const [code, pct] of Object.entries(prop.alloc)) mix.amounts[code] = Math.round(total * pct / 100);
+  renderMix();                 // 왼쪽 믹스 표·미리보기 갱신
+  aiClose();                   // 적용하면 드로어 닫고 결과를 보여 준다
+  toast("제안을 믹스 예산에 적용했습니다" + note + ". '월별 예산에 저장'을 누르세요");
 }
 
 function aiRender() {
