@@ -1949,9 +1949,9 @@ function parseMixProposal(text) {
       const m = seg.match(/([A-Za-z_]+)\s*=\s*(\d+(?:\.\d+)?)/);
       if (m && P_BY[m[1]]) out[m[1]] = parseFloat(m[2]);
     }
-    if (Object.keys(out).length) return out;
   }
-  const line = (text.split("\n").find(l => /배분|비중/.test(l)) || "");
+  if (!Object.keys(out).length) {
+    const line = (text.split("\n").find(l => /배분|비중/.test(l)) || "");
   const norm = x => x.replace(/\s|스폰서드|광고|검색(?!광고)/g, "");
   for (const seg of line.split(/[,/]/)) {
     const m = seg.match(/([가-힣A-Za-z\- ]+?)\s*(\d+(?:\.\d+)?)\s*%/);
@@ -1962,17 +1962,29 @@ function parseMixProposal(text) {
       const ko = norm(p.ko);
       if (ko === want || ko.startsWith(want) || want.startsWith(ko) || ko.includes(want)) { hit = p.code; break; }
     }
-    if (hit) out[hit] = parseFloat(m[2]);
+      if (hit) out[hit] = parseFloat(m[2]);
+    }
   }
-  return Object.keys(out).length ? out : null;
+  if (!Object.keys(out).length) return null;
+  // 제안 총예산도 뽑는다: [TOTAL] 30000000  또는  '총예산 3,000만원' 류
+  let total = null;
+  const tm = text.match(/\[TOTAL\]\s*([\d,]+)/i);
+  if (tm) total = Number(tm[1].replace(/,/g, ""));
+  else {
+    const km = text.match(/총\s*예산[^0-9]*([\d,]+)\s*(억|만)?\s*원?/);
+    if (km) { let n = Number(km[1].replace(/,/g, "")); if (km[2] === "억") n *= 1e8; else if (km[2] === "만") n *= 1e4; total = n; }
+  }
+  return { alloc: out, total };
 }
 
 function applyMixProposal(prop) {
-  if (!mix.total) return toast("총 예산을 먼저 입력하세요");
+  // 총예산이 비어 있으면 AI 가 제안한 총예산을 채운다
+  if (!mix.total && prop.total) { mix.total = prop.total; setTotalInput(prop.total); }
+  if (!mix.total) return toast("총 예산이 없습니다. 위에 총예산을 입력하거나, AI에게 '총예산도 제안해줘'라고 하세요");
   mix.amounts = {};
-  for (const [code, pct] of Object.entries(prop)) mix.amounts[code] = Math.round(mix.total * pct / 100);
+  for (const [code, pct] of Object.entries(prop.alloc)) mix.amounts[code] = Math.round(mix.total * pct / 100);
   renderMix();
-  toast("제안 배분을 믹스에 적용했습니다. 저장은 '월별 예산에 저장'");
+  toast("제안 배분을 믹스에 적용했습니다. '월별 예산에 저장'을 누르세요");
 }
 
 function aiRender() {
@@ -1990,8 +2002,9 @@ function aiRender() {
       b.append(btn);
       const prop = parseMixProposal(m.content);
       if (prop) {
-        const ap = el("button", { class: "to-strategy",
-          text: "제안 배분 적용 (" + Object.entries(prop).map(([c, v]) => platKo(c) + " " + v + "%").join(" / ") + ")" });
+        const label = "💰 믹스에 적용"
+          + (prop.total && !mix.total ? ` (총 ${won(prop.total)}원 + 배분)` : " (제안 배분)");
+        const ap = el("button", { class: "to-strategy", text: label });
         ap.onclick = () => applyMixProposal(prop);
         b.append(ap);
       }
