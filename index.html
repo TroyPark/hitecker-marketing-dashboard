@@ -393,6 +393,9 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
 .bubble .to-strategy { display: block; margin-top: 6px; font-size: 11.5px; color: var(--series-1); cursor: pointer; background: none; border: 0; padding: 0; }
 .bubble.thinking { color: var(--text-muted); font-style: italic; }
 .drawer-empty { color: var(--text-muted); font-size: 13px; text-align: center; margin: auto 0; }
+.drawer-apply { padding: 10px 18px 0; }
+.drawer-apply .btn { width: 100%; }
+.drawer-apply .sub { display: block; margin-top: 4px; font-size: 11.5px; color: var(--text-muted); text-align: center; }
 .drawer-input { display: flex; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--border); }
 .drawer-input textarea { flex: 1; resize: none; padding: 8px 10px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--plane); font: inherit; }
@@ -741,6 +744,9 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
     <button class="btn" id="ai-close">닫기</button>
   </div>
   <div class="drawer-chat" id="ai-chat"></div>
+  <div class="drawer-apply" id="ai-apply-bar" hidden>
+    <button class="btn solid" id="ai-apply" type="button">💰 제안을 미디어 믹스에 적용</button>
+  </div>
   <form class="drawer-input" id="ai-form">
     <textarea id="ai-text" rows="2" placeholder="예: 다음 달 믹스 전략 제안해줘 / 메타 줄이고 검색 늘려줘"></textarea>
     <button class="btn solid" id="ai-send" type="submit">보내기</button>
@@ -1998,31 +2004,48 @@ function applyMixProposal(prop) {
   toast("제안을 믹스 예산에 적용했습니다" + note + ". '월별 예산에 저장'을 누르세요");
 }
 
+/* 화면·전략칸에선 기계줄([MIX]/[TOTAL])을 숨긴다 (파싱엔 원문 사용) */
+function cleanStrategy(text) {
+  return text.split("\n").filter(l => !/^\s*\[(MIX|TOTAL)\]/i.test(l)).join("\n").trim();
+}
+
+let lastProposal = null;    // 가장 최근 AI 답변에서 뽑은 제안(믹스에 적용용)
+
+function updateApplyBar() {
+  // 최근 assistant 답변에서 제안을 찾는다
+  lastProposal = null;
+  for (let i = aiChat.length - 1; i >= 0; i--) {
+    if (aiChat[i].role !== "assistant") continue;
+    const prop = parseMixProposal(aiChat[i].content);
+    if (prop) { lastProposal = prop; break; }
+  }
+  const bar = $("#ai-apply-bar");
+  if (!lastProposal) { bar.hidden = true; return; }
+  bar.hidden = false;
+  const summary = Object.entries(lastProposal.alloc).map(([c, v]) => platKo(c) + " " + v + "%").join(" / ");
+  $("#ai-apply").innerHTML = "💰 제안을 미디어 믹스에 적용"
+    + `<span class="sub">${summary}${lastProposal.total ? " · 총 " + won(lastProposal.total) + "원" : ""}</span>`;
+}
+
 function aiRender() {
   const box = $("#ai-chat");
   box.innerHTML = "";
   if (!aiChat.length) {
     box.innerHTML = `<div class="drawer-empty">아래에 "다음 달 믹스 전략 제안해줘" 라고 보내보세요.</div>`;
-    return;
-  }
-  for (const m of aiChat) {
-    const b = el("div", { class: "bubble " + (m.role === "user" ? "user" : "ai"), text: m.content });
-    if (m.role === "assistant") {
-      const btn = el("button", { class: "to-strategy", text: "전략칸에 넣기 →" });
-      btn.onclick = () => { $("#ai-strategy").value = m.content; toast("전략칸에 넣었습니다. 수정 후 저장하세요"); };
-      b.append(btn);
-      const prop = parseMixProposal(m.content);
-      if (prop) {
-        const label = "💰 믹스에 적용"
-          + (prop.total && !mix.total ? ` (총 ${won(prop.total)}원 + 배분)` : " (제안 배분)");
-        const ap = el("button", { class: "to-strategy", text: label });
-        ap.onclick = () => applyMixProposal(prop);
-        b.append(ap);
+  } else {
+    for (const m of aiChat) {
+      const shown = m.role === "assistant" ? cleanStrategy(m.content) : m.content;
+      const b = el("div", { class: "bubble " + (m.role === "user" ? "user" : "ai"), text: shown });
+      if (m.role === "assistant") {
+        const btn = el("button", { class: "to-strategy", text: "전략칸에 넣기 →" });
+        btn.onclick = () => { $("#ai-strategy").value = cleanStrategy(m.content); toast("전략칸에 넣었습니다. 수정 후 저장하세요"); };
+        b.append(btn);
       }
+      box.append(b);
     }
-    box.append(b);
+    box.scrollTop = box.scrollHeight;
   }
-  box.scrollTop = box.scrollHeight;
+  updateApplyBar();
 }
 
 async function aiOpen() {
@@ -2074,6 +2097,7 @@ $("#ai-form").addEventListener("submit", e => {
   $("#ai-text").value = "";
   aiSend(t);
 });
+$("#ai-apply").onclick = () => { if (lastProposal) applyMixProposal(lastProposal); };
 $("#ai-save-strategy").onclick = async () => {
   const strategy = $("#ai-strategy").value.trim();
   const btn = $("#ai-save-strategy");
