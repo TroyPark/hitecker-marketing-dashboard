@@ -523,7 +523,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
       <div class="grid2">
         <div class="card">
           <div class="card-head">
-            <div><h3>일별 광고비 · 전환매출</h3></div>
+            <div><h3>일별 광고비 · 전환매출</h3><p class="cap">예산 입력 시 일 예산 배분선 표시</p></div>
             <div class="tools"><button class="toggle-table" data-tt="trend">표로 보기</button></div>
           </div>
           <div class="legend" id="trend-legend"></div>
@@ -1002,6 +1002,23 @@ function proratedBudget(codes) {
   return out;
 }
 
+/* 한 사업의 매체별 예산을, 주어진 기간과 겹치는 일수만큼 일할 안분한다.
+   미디어 믹스(budgets: 월×사업×매체)를 광고 운영 탭에서 집행액과 비교할 때 쓴다. */
+function proratedPlatformBudget(brand, from, to) {
+  const out = {};
+  for (const r of BUDGET) {
+    if (r.b !== brand) continue;
+    const [y, mo] = r.m.split("-").map(Number);
+    const dim = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    const mStart = `${r.m}-01`, mEnd = `${r.m}-${String(dim).padStart(2, "0")}`;
+    const f = from > mStart ? from : mStart;
+    const t = to < mEnd ? to : mEnd;
+    if (f > t) continue;
+    out[r.p] = (out[r.p] || 0) + r.amt * daysBetween(f, t) / dim;
+  }
+  return out;
+}
+
 /* ══ SVG 헬퍼 ═════════════════════════════════════════════════ */
 const NS = "http://www.w3.org/2000/svg";
 const svgEl = (tag, attrs) => {
@@ -1180,6 +1197,13 @@ function statusBadge(ratio, bands, labels) {
   return `<span class="badge"><i style="color:var(--${tone})">●</i>${labels[i]}</span>`;
 }
 
+/* 소진율: 초과(>100%) 빨강, 임박(>90%) 주황. 예산 없으면 – */
+function usedCell(u) {
+  if (!isFinite(u)) return "–";
+  const tone = u > 1 ? "critical" : u > 0.9 ? "warning" : "";
+  return tone ? `<span style="color:var(--${tone})">${pct0(u)}</span>` : pct0(u);
+}
+
 function sortRows(rows, sort) {
   return [...rows].sort((a, b) => {
     const av = a[sort.key], bv = b[sort.key];
@@ -1336,7 +1360,9 @@ function renderExec() {
 
 /* ══ 광고 운영 ════════════════════════════════════════════════ */
 const ADS_TILES = [
-  { key: "cost", label: "광고비", fmt: won, unit: "원", upGood: null },
+  { key: "cost",   label: "광고비", fmt: won, unit: "원", upGood: null },
+  { key: "budget", label: "예산",   fmt: v => (v > 0 ? won(v) : "–"), unit: "원", upGood: null },
+  { key: "used",   label: "소진율", fmt: v => (isFinite(v) ? pct0(v) : "–"), unit: "", upGood: null },
   { key: "clk",  label: "클릭수", fmt: num, unit: "회", upGood: true },
   { key: "cv",   label: "전환",   fmt: num, unit: "건", upGood: true },
   { key: "cpa",  label: "CPA",    fmt: v => (isFinite(v) ? won(v) : "–"), unit: "원", upGood: false },
@@ -1349,6 +1375,8 @@ const PERF_COLS = [
   { key: "ctr",    label: "CTR",      f: r => pct(r.ctr),  t: r => pct(r.ctr) },
   { key: "cpc",    label: "CPC",      f: r => num(r.cpc),  t: r => num(r.cpc) },
   { key: "cost",   label: "광고비",   f: r => num(r.cost), t: r => num(r.cost) },
+  { key: "budget", label: "예산",     f: r => (r.budget > 0 ? num(r.budget) : "–"), t: r => (r.budget > 0 ? num(r.budget) : "–") },
+  { key: "used",   label: "소진율",   f: r => usedCell(r.used), t: r => usedCell(r.used) },
   { key: "cv",     label: "전환",     f: r => num(r.cv),   t: r => num(r.cv) },
   { key: "rev",    label: "전환매출", f: r => num(r.rev),  t: r => num(r.rev) },
   { key: "cpa",    label: "CPA",      f: r => num(r.cpa),  t: r => num(r.cpa) },
@@ -1362,6 +1390,14 @@ function renderAds() {
   const pFrom = shiftDate(state.from, -len), pTo = shiftDate(state.from, -1);
   const prev = derive(ADS.filter(r => r.b === state.brand && r.d >= pFrom && r.d <= pTo && state.channels.has(r.p)).reduce(addAd, zero()));
   const cur = derive(rowsAll.reduce(addAd, zero()));
+
+  // 미디어 믹스 예산을 기간 일수만큼 일할 안분 (선택한 매체만 합산)
+  const budCur = proratedPlatformBudget(state.brand, state.from, state.to);
+  const budPrev = proratedPlatformBudget(state.brand, pFrom, pTo);
+  const sumBud = o => PLATFORMS.reduce((n, p) => state.channels.has(p.code) ? n + (o[p.code] || 0) : n, 0);
+  cur.budget = sumBud(budCur);  cur.used = cur.budget ? cur.cost / cur.budget : NaN;
+  prev.budget = sumBud(budPrev); prev.used = prev.budget ? prev.cost / prev.budget : NaN;
+
   tiles($("#ads-tiles"), ADS_TILES, cur, prev, `직전 ${len}일`, "five");
 
   const dates = [...new Set(rowsAll.map(r => r.d))].sort();
@@ -1369,16 +1405,30 @@ function renderAds() {
   rowsAll.forEach(r => addAd(byDate[r.d], r));
   const s1 = { name: "광고비", color: cssVar("--series-1"), values: dates.map(d => byDate[d].cost), area: true };
   const s2 = { name: "전환매출", color: cssVar("--series-2"), values: dates.map(d => byDate[d].rev) };
-  $("#trend-legend").innerHTML = [s1, s2].map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("");
-  lineChart($("#trend-plot"), { dates, series: [s1, s2] });
+  // 일 예산 배분선: 그 날이 속한 달의 (선택 매체) 예산을 그 달 일수로 나눈 값
+  const dailyBud = d => {
+    const m = d.slice(0, 7), [y, mo] = m.split("-").map(Number);
+    const dim = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    let sum = 0;
+    for (const r of BUDGET)
+      if (r.b === state.brand && r.m === m && state.channels.has(r.p)) sum += r.amt;
+    return sum / dim;
+  };
+  const series = [s1, s2];
+  if (cur.budget > 0) series.push({ name: "일 예산", color: cssVar("--series-4"), values: dates.map(dailyBud) });
+  $("#trend-legend").innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("");
+  lineChart($("#trend-plot"), { dates, series });
   simpleTable($("#trend-table"), [["날짜", d => d], ["광고비", d => num(byDate[d].cost)],
     ["전환", d => num(byDate[d].cv)], ["전환매출", d => num(byDate[d].rev)]], [...dates].reverse());
 
   const per = {};
   rowsAll.forEach(r => addAd(per[r.p] ||= zero(), r));
-  const perRows = PLATFORMS.filter(p => state.channels.has(p.code)).map(p => ({
-    code: p.code, name: p.ko, color: platColor(p.code), ...derive(per[p.code] || zero()),
-  }));
+  const perRows = PLATFORMS.filter(p => state.channels.has(p.code)).map(p => {
+    const d = derive(per[p.code] || zero());
+    const budget = budCur[p.code] || 0;
+    return { code: p.code, name: p.ko, color: platColor(p.code), ...d,
+             budget, used: budget ? d.cost / budget : NaN };
+  });
   const mix = perRows.filter(r => r.cost > 0).sort((a, b) => b.cost - a.cost);
   const totalCost = mix.reduce((s, r) => s + r.cost, 0);
   barsH($("#mix-plot"), {
