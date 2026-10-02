@@ -1985,7 +1985,7 @@ async function aiSend(text) {
   box.append(thinking); box.scrollTop = box.scrollHeight;
   $("#ai-send").disabled = true;
   try {
-    const out = await sbFetch("/functions/v1/mix-strategy", {
+    const out = await sbFetch("/functions/v1/smooth-handler", {   // Supabase 자동 생성 이름
       method: "POST",
       body: JSON.stringify({ context: aiContext(), messages: aiChat }),
     });
