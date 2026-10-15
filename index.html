@@ -647,6 +647,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
             <p class="cap">방향키 이동 · Enter 편집 · Tab 다음 칸 · 엑셀 범위 Ctrl+V 붙여넣기</p></div>
           <div class="tools">
             <button class="btn" id="sheet-add">행 추가</button>
+            <button class="btn" id="sheet-addcol" hidden>+ 열 추가</button>
             <button class="btn" id="sheet-reset" disabled>되돌리기</button>
             <button class="btn solid" id="sheet-save" disabled>저장</button>
           </div>
@@ -918,6 +919,7 @@ const SLOT_MAX = 8;
 const ADS = window.ADS_DATA || [];
 const BIZ = window.BIZ_DATA || [];
 const BUDGET = window.BUDGET_DATA || [];
+const METRICS = window.METRICS_DATA || [];   // 커스텀 지표(열): {code,label}
 const replaceAll = (arr, rows) => { arr.length = 0; arr.push(...rows); };
 
 let MIN_DATE, MAX_DATE;
@@ -995,8 +997,9 @@ function toast(msg) {
 
 /* 파생지표는 반드시 합계에서 재계산한다 — 일별 값을 평균내면 틀린다 */
 const zero = () => ({ imp: 0, clk: 0, cost: 0, cv: 0, rev: 0,
-                      su: 0, od: 0, rvz: 0, rfd: 0, budget: 0 });
-function addAd(a, r) { a.imp += r.imp; a.clk += r.clk; a.cost += r.cost; a.cv += r.cv; a.rev += r.rev; return a; }
+                      su: 0, od: 0, rvz: 0, rfd: 0, budget: 0, x: {} });
+function addAd(a, r) { a.imp += r.imp; a.clk += r.clk; a.cost += r.cost; a.cv += r.cv; a.rev += r.rev;
+  if (r.x) { a.x ||= {}; for (const k in r.x) a.x[k] = (a.x[k] || 0) + (Number(r.x[k]) || 0); } return a; }
 function addBiz(a, r) { a.su += r.su; a.od += r.od; a.rvz += r.rv; a.rfd += (r.rf || 0); return a; }
 
 /* rvz=매출(총), rfd=환불, net=최종매출.
@@ -1226,7 +1229,7 @@ function tiles(host, defs, cur, prev, label, cls) {
   host.className = "tiles" + (cls ? " " + cls : "");
   host.innerHTML = "";
   for (const d of defs) {
-    const v = cur[d.key], p = prev[d.key];
+    const v = d.get ? d.get(cur) : cur[d.key], p = d.get ? d.get(prev) : prev[d.key];
     let delta;
     if (isFinite(v) && isFinite(p) && p !== 0) {
       const ch = (v - p) / Math.abs(p);
@@ -1450,7 +1453,9 @@ function renderAds() {
   cur.budget = sumBud(budCur);  cur.used = cur.budget ? cur.cost / cur.budget : NaN;
   prev.budget = sumBud(budPrev); prev.used = prev.budget ? prev.cost / prev.budget : NaN;
 
-  tiles($("#ads-tiles"), ADS_TILES, cur, prev, `직전 ${len}일`, "five");
+  const adsTiles = ADS_TILES.concat(METRICS.map(m =>
+    ({ label: m.label, unit: "", upGood: true, fmt: num, get: r => (r.x && r.x[m.code] != null) ? r.x[m.code] : NaN })));
+  tiles($("#ads-tiles"), adsTiles, cur, prev, `직전 ${len}일`, "five");
 
   const dates = [...new Set(rowsAll.map(r => r.d))].sort();
   const byDate = Object.fromEntries(dates.map(d => [d, zero()]));
@@ -1551,11 +1556,11 @@ const SHEETS = {
       { k: "rev", label: "전환매출", type: "num" },
     ],
     blank: () => ({ d: state.to, b: sheetBrandOr(), p: sheetPlatOr(),
-                    imp: 0, clk: 0, cost: 0, cv: 0, rev: 0 }),
+                    imp: 0, clk: 0, cost: 0, cv: 0, rev: 0, x: {} }),
     match: r => inRange(r) && (state.sheetPlat === "*" || r.p === state.sheetPlat),
     conflict: "date,brand,platform",
     toRow: r => ({ date: r.d, brand: r.b, platform: r.p, impressions: r.imp,
-                   clicks: r.clk, adcost: r.cost, conversions: r.cv, conv_value: r.rev }),
+                   clicks: r.clk, adcost: r.cost, conversions: r.cv, conv_value: r.rev, extra: r.x || {} }),
   },
   biz: {
     title: "사업 실적", data: BIZ, table: "business_daily",
@@ -1588,6 +1593,14 @@ const SHEETS = {
     toRow: r => ({ month: r.m + "-01", brand: r.b, platform: r.p, amount: r.amt }),  // 월은 1일로 정규화
   },
 };
+// 광고 실적 시트의 고정 열 + 커스텀 지표(열)을 합쳐 다시 만든다
+const BASE_ADS_COLS = SHEETS.ads.cols.slice();
+function metricCols() {
+  return METRICS.map(m => ({ k: "x:" + m.code, label: m.label, type: "num", metric: true, w: 96 }));
+}
+function rebuildAdsCols() { SHEETS.ads.cols = BASE_ADS_COLS.concat(metricCols()); }
+rebuildAdsCols();
+
 const MAX_SHEET_ROWS = 300;
 let sheetRows = [];                 // 화면에 띄운 행 (원본 객체 참조)
 /* 행을 앞에 끼워 넣으면 인덱스가 밀리므로 행 '객체'를 키로 잡는다 */
@@ -1599,12 +1612,14 @@ const dirtyCount = () => [...dirty.values()].reduce((n, s) => n + s.size, 0);
 const optsOf = col => (typeof col.opts === "function" ? col.opts() : col.opts);
 const cellText = (row, col) => {
   if (col.calc) return num(col.calc(row));          // 계산 칸은 저장하지 않고 보여만 준다
+  if (col.k.startsWith("x:")) return num(row.x && row.x[col.k.slice(2)]);
   const v = row[col.k];
   if (col.type === "select") return (optsOf(col).find(o => o[0] === v) || [v, v])[1];
   if (col.type === "num") return num(v);
   return v == null ? "" : String(v);
 };
-const cellRaw = (row, col) => (col.type === "num" ? String(row[col.k] ?? 0) : String(row[col.k] ?? ""));
+const cellRaw = (row, col) => col.k.startsWith("x:") ? String((row.x && row.x[col.k.slice(2)]) ?? 0)
+  : (col.type === "num" ? String(row[col.k] ?? 0) : String(row[col.k] ?? ""));
 
 function buildSheet() {
   const cfg = SHEETS[state.sheet];
@@ -1679,8 +1694,15 @@ function commit(ri, ci, raw) {
     if (!hit) { toast(`'${raw}' 는 선택할 수 없는 값입니다`); return; }
     v = hit[0];
   }
-  if (String(row[col.k]) === String(v)) return;
-  row[col.k] = v;
+  if (col.k.startsWith("x:")) {
+    const code = col.k.slice(2);
+    row.x ||= {};
+    if (String(row.x[code] ?? "") === String(v)) return;
+    row.x[code] = v;
+  } else {
+    if (String(row[col.k]) === String(v)) return;
+    row[col.k] = v;
+  }
   if (!dirty.has(row)) dirty.set(row, new Set());
   dirty.get(row).add(col.k);
   markDirty();
@@ -2138,6 +2160,8 @@ function render() {
 
   // 매체 탭은 광고 실적·월별 예산 시트에서만 쓴다
   $("#sheet-plats").classList.toggle("hide", state.sheet === "biz");
+  // 열 추가는 광고 실적 시트에서만
+  $("#sheet-addcol").hidden = state.sheet !== "ads";
 
   if (isExec) renderExec();
   else if (isAds) renderAds();
@@ -2149,7 +2173,7 @@ function render() {
    Supabase 가 붙어 있으면 거기서, 아니면 data.js 의 로컬 데이터로 돈다. */
 const MAP_IN = {
   ad: r => ({ d: r.date, b: r.brand, p: r.platform, imp: +r.impressions, clk: +r.clicks,
-              cost: +r.adcost, cv: +r.conversions, rev: +r.conv_value }),
+              cost: +r.adcost, cv: +r.conversions, rev: +r.conv_value, x: r.extra || {} }),
   biz: r => ({ d: r.date, b: r.brand, su: +r.signups, od: +r.orders,
                rv: +r.revenue, rf: +(r.refund || 0) }),
   budget: r => ({ m: String(r.month).slice(0, 7), b: r.brand, p: r.platform, amt: +r.amount }),
@@ -2182,6 +2206,10 @@ async function loadDataInner() {
   if (br.length) replaceAll(BRANDS, br.map(r => ({ code: r.code, ko: r.name_ko, active: r.active !== false })));
   if (pl.length) replaceAll(PLATFORMS, pl.map(r => ({ code: r.code, ko: r.name_ko })));
   reindexMaster();
+  let mt = [];
+  try { mt = await sbSelect("metrics", "select=*&order=sort.asc"); } catch { mt = []; }
+  replaceAll(METRICS, (mt || []).filter(m => m.active !== false).map(m => ({ code: m.code, label: m.label })));
+  rebuildAdsCols();
   state.brands = new Set(BRANDS.filter(b => b.active !== false).map(b => b.code));
   state.channels = new Set(PLATFORMS.map(p => p.code));
   if (!P_BY[state.detail]) state.detail = PLATFORMS[0]?.code || "";
@@ -2390,6 +2418,7 @@ $("#sheet").addEventListener("focusin", e => {
     td.classList.add("sel");
   }
 });
+$("#sheet-addcol").onclick = () => openMaster("metric");
 $("#sheet-add").onclick = () => {
   const cfg = SHEETS[state.sheet];
   const row = cfg.blank();
@@ -2570,6 +2599,7 @@ function parseLong(cfg, grid, errors) {
     if (i >= 0) idx[c.k] = i;
   }
   const optional = new Set(["rf"]);             // 환불은 없어도 0 으로 본다
+  cols.forEach(c => { if (c.k.startsWith("x:")) optional.add(c.k); });   // 커스텀 열도 없어도 됨
   const missing = cols.filter(c => !optional.has(c.k) && !(c.k in idx));
   if (missing.length) {
     errors.push("필요한 열이 없습니다: " + missing.map(c => c.label).join(", "));
@@ -2594,6 +2624,9 @@ function parseLong(cfg, grid, errors) {
         const hit = optsOf(c).find(o => o[0] === t || o[1] === t);
         if (!hit) bad = `${i + 1}행: 등록되지 않은 ${c.label} (${v})`;
         else row[c.k] = hit[0];
+      } else if (c.k.startsWith("x:")) {
+        const n = Number(String(v == null ? "" : v).replace(/[^\d.-]/g, ""));
+        (row.x ||= {})[c.k.slice(2)] = isFinite(n) ? n : 0;
       } else {
         const n = Number(String(v == null ? "" : v).replace(/[^\d.-]/g, ""));
         row[c.k] = isFinite(n) ? n : 0;
@@ -2750,23 +2783,24 @@ addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if 
 let modalKind = "brand";
 let editingCode = null;          // null 이면 추가, 값이 있으면 그 사업을 수정
 
+const KIND_KO = { brand: "사업", platform: "매체", metric: "지표(열)" };
 function openMaster(kind, code) {
   modalKind = kind;
   editingCode = code || null;
-  const isBrand = kind === "brand";
   const editing = Boolean(code);
-  $("#modal-title").textContent =
-    (isBrand ? "사업 " : "매체 ") + (editing ? "수정" : "추가");
-  $("#m-ko-label").textContent = isBrand ? "사업명" : "매체명";
-  $("#m-ko").placeholder = isBrand ? "예: 내일하이" : "예: 카카오 모먼트";
-  $("#m-code").placeholder = isBrand ? "예: Learnershigh" : "예: Kakao_moment";
-  $("#m-channel-wrap").hidden = isBrand;
-  $("#m-ko").value = editing ? B_BY[code].ko : "";
+  const noun = KIND_KO[kind] || "항목";
+  $("#modal-title").textContent = noun + (editing ? " 수정" : " 추가");
+  $("#m-ko-label").textContent = noun + "명";
+  $("#m-ko").placeholder = kind === "brand" ? "예: 내일하이" : kind === "platform" ? "예: 카카오 모먼트" : "예: 영상 조회수";
+  $("#m-code").placeholder = kind === "brand" ? "예: Learnershigh" : kind === "platform" ? "예: Kakao_moment" : "예: video_views";
+  $("#m-channel-wrap").hidden = kind !== "platform";
+  $("#m-ko").value = editing && B_BY[code] ? B_BY[code].ko : "";
   $("#m-code").value = editing ? code : "";
   $("#m-channel").value = "";
   $("#m-code-hint").textContent = editing
     ? "바꾸면 이 사업의 광고·사업실적·예산 데이터가 모두 새 코드로 따라갑니다"
-    : "영문·숫자·밑줄. 저장 후에도 바꿀 수 있습니다";
+    : (kind === "metric" ? "영문·숫자·밑줄. 광고 실적 숫자 열로 추가되고 광고 운영 타일에 합계로 표시됩니다"
+                         : "영문·숫자·밑줄. 저장 후에도 바꿀 수 있습니다");
   $("#modal-ok").textContent = editing ? "저장" : "추가";
   $("#modal-err").textContent = "";
   $("#modal").hidden = false;
@@ -2812,6 +2846,13 @@ async function editBrand(oldCode, newCode, ko) {
 const closeMaster = () => { $("#modal").hidden = true; };
 
 async function addMaster(kind, code, ko, channel) {
+  if (kind === "metric") {
+    if (METRICS.find(m => m.code === code)) throw new Error("이미 있는 지표 코드입니다.");
+    if (SB) await sbUpsert("metrics", [{ code, label: ko, sort: METRICS.length + 1 }], "code");
+    METRICS.push({ code, label: ko });
+    rebuildAdsCols();
+    return;
+  }
   const dup = kind === "brand" ? B_BY[code] : P_BY[code];
   if (dup) throw new Error(`이미 등록된 코드입니다 (${dup.ko}).`);
   if (kind === "brand") {
@@ -2847,7 +2888,7 @@ $("#modal-form").addEventListener("submit", async e => {
       toast(`'${ko}' 로 수정했습니다`);
     } else {
       await addMaster(modalKind, code, ko, $("#m-channel").value.trim());
-      toast(`${modalKind === "brand" ? "사업" : "매체"} '${ko}' 추가`);
+      toast(`${KIND_KO[modalKind] || "항목"} '${ko}' 추가`);
     }
     closeMaster();
     render();

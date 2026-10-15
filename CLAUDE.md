@@ -12,13 +12,14 @@
 ## 구조
 - `index.html` — 앱 전체(HTML+CSS+JS). 4탭: 경영 대시보드 / 광고 운영 / 미디어 믹스 / 데이터 입력
 - 데이터는 `config.js` 있으면 Supabase, 없으면 `data.js`(로컬 목업)로 동작
-- `supabase/*.sql` — 01 schema / 02 locks+brand active / 03 refund / 04 rename cascade / 05 mix_strategy
+- `supabase/*.sql` — 01 schema / 02 locks+brand active / 03 refund / 04 rename cascade / 05 mix_strategy / 06 metrics(커스텀 열)
 - `supabase/functions/mix-strategy/` — Edge Function(Claude Sonnet 5 프록시, AI 전략). 키는 Supabase 비밀값 ANTHROPIC_API_KEY
 - `scripts/` — migrate.py(엑셀→DB), set_lock.py(잠금 비번), deploy.ps1
 - 배포: main push → Actions가 config.js 생성 후 Pages 배포
 
 ## 테이블 (RLS on, anon 권한 회수됨, 뷰는 security_invoker)
-- ad_daily(date,brand,platform) 노출·클릭·광고비·전환·전환매출 — **911행(내일하이만 실데이터)**
+- ad_daily(date,brand,platform) 노출·클릭·광고비·전환·전환매출(+extra JSONB 커스텀열) — **911행(내일하이만 실데이터)**
+- metrics(code,label) 커스텀 지표(열) 마스터. ad_daily.extra 에 값, row.x[code] 로 다룸, 광고운영 타일 합계
 - business_daily(date,brand) 가입·결제·매출·refund — **0행**
 - budgets(month,brand,platform) 매체별 월예산 — **0행**
 - brands/platforms(code) 마스터, brands.active로 종료. upload_logs, profiles, section_locks
@@ -44,6 +45,7 @@ anon 전체 401, 로그인 사용자 권한상승·잠금비번 조회 전부 �
 - 사업실적·예산 데이터 입력 대기(0행). KFO·오라클·K-뉴딜 광고데이터 미확보
 - 04_rename_cascade.sql 적용 여부 미확인(사업 코드변경 시 필요, 이름변경은 불필요)
 - 탭별 자동 인사이트 문구(제안만 함, 미구현)
-- 미디어 믹스 AI 전략: 제안 믹스 '자동 적용' 버튼 미구현(대화·전략저장만). Edge Function 배포 필요
+- 미디어 믹스 AI 전략: Edge Function(smooth-handler) 배포됨. 제안 자동적용 버튼 구현됨
+- 커스텀 열: 데이터입력 광고실적 '+열 추가' → 광고운영 타일. 06_metrics.sql 적용 필요
 
 상세 이력은 작업일지.md, 기획은 기획서.md.
