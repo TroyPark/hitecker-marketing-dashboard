@@ -1453,7 +1453,7 @@ function renderAds() {
   cur.budget = sumBud(budCur);  cur.used = cur.budget ? cur.cost / cur.budget : NaN;
   prev.budget = sumBud(budPrev); prev.used = prev.budget ? prev.cost / prev.budget : NaN;
 
-  const adsTiles = ADS_TILES.concat(METRICS.map(m =>
+  const adsTiles = ADS_TILES.concat(metricsFor(state.brand).map(m =>
     ({ label: m.label, unit: "", upGood: true, fmt: num, get: r => (r.x && r.x[m.code] != null) ? r.x[m.code] : NaN })));
   tiles($("#ads-tiles"), adsTiles, cur, prev, `직전 ${len}일`, "five");
 
@@ -1595,10 +1595,17 @@ const SHEETS = {
 };
 // 광고 실적 시트의 고정 열 + 커스텀 지표(열)을 합쳐 다시 만든다
 const BASE_ADS_COLS = SHEETS.ads.cols.slice();
-function metricCols() {
-  return METRICS.map(m => ({ k: "x:" + m.code, label: m.label, type: "num", metric: true, w: 96 }));
+const metricsFor = brand => METRICS.filter(m => m.brand === brand);
+function metricColsFor(brand) {
+  // 전체 사업이면 코드 기준 합집합, 특정 사업이면 그 사업 지표만
+  let list;
+  if (!brand || brand === "*") {
+    const seen = new Set(); list = [];
+    for (const m of METRICS) if (!seen.has(m.code)) { seen.add(m.code); list.push(m); }
+  } else list = metricsFor(brand);
+  return list.map(m => ({ k: "x:" + m.code, label: m.label, type: "num", metric: true, w: 96 }));
 }
-function rebuildAdsCols() { SHEETS.ads.cols = BASE_ADS_COLS.concat(metricCols()); }
+function rebuildAdsCols() { SHEETS.ads.cols = BASE_ADS_COLS.concat(metricColsFor(state.sheetBrand)); }
 rebuildAdsCols();
 
 const MAX_SHEET_ROWS = 300;
@@ -1622,6 +1629,7 @@ const cellRaw = (row, col) => col.k.startsWith("x:") ? String((row.x && row.x[co
   : (col.type === "num" ? String(row[col.k] ?? 0) : String(row[col.k] ?? ""));
 
 function buildSheet() {
+  rebuildAdsCols();                 // 선택한 사업에 맞춰 커스텀 열 재구성
   const cfg = SHEETS[state.sheet];
   $("#sheet-title").textContent = cfg.title;
   const all = cfg.data.filter(cfg.match)
@@ -2208,7 +2216,7 @@ async function loadDataInner() {
   reindexMaster();
   let mt = [];
   try { mt = await sbSelect("metrics", "select=*&order=sort.asc"); } catch { mt = []; }
-  replaceAll(METRICS, (mt || []).filter(m => m.active !== false).map(m => ({ code: m.code, label: m.label })));
+  replaceAll(METRICS, (mt || []).filter(m => m.active !== false).map(m => ({ brand: m.brand, code: m.code, label: m.label })));
   rebuildAdsCols();
   state.brands = new Set(BRANDS.filter(b => b.active !== false).map(b => b.code));
   state.channels = new Set(PLATFORMS.map(p => p.code));
@@ -2418,7 +2426,10 @@ $("#sheet").addEventListener("focusin", e => {
     td.classList.add("sel");
   }
 });
-$("#sheet-addcol").onclick = () => openMaster("metric");
+$("#sheet-addcol").onclick = () => {
+  if (state.sheetBrand === "*") return toast("사업을 먼저 선택하세요 (전체 사업에는 열 추가 불가)");
+  openMaster("metric");
+};
 $("#sheet-add").onclick = () => {
   const cfg = SHEETS[state.sheet];
   const row = cfg.blank();
@@ -2789,7 +2800,8 @@ function openMaster(kind, code) {
   editingCode = code || null;
   const editing = Boolean(code);
   const noun = KIND_KO[kind] || "항목";
-  $("#modal-title").textContent = noun + (editing ? " 수정" : " 추가");
+  $("#modal-title").textContent = (kind === "metric" && state.sheetBrand !== "*" ? brandKo(state.sheetBrand) + " " : "")
+    + noun + (editing ? " 수정" : " 추가");
   $("#m-ko-label").textContent = noun + "명";
   $("#m-ko").placeholder = kind === "brand" ? "예: 내일하이" : kind === "platform" ? "예: 카카오 모먼트" : "예: 영상 조회수";
   $("#m-code").placeholder = kind === "brand" ? "예: Learnershigh" : kind === "platform" ? "예: Kakao_moment" : "예: video_views";
@@ -2847,9 +2859,11 @@ const closeMaster = () => { $("#modal").hidden = true; };
 
 async function addMaster(kind, code, ko, channel) {
   if (kind === "metric") {
-    if (METRICS.find(m => m.code === code)) throw new Error("이미 있는 지표 코드입니다.");
-    if (SB) await sbUpsert("metrics", [{ code, label: ko, sort: METRICS.length + 1 }], "code");
-    METRICS.push({ code, label: ko });
+    const brand = state.sheetBrand;
+    if (!brand || brand === "*") throw new Error("먼저 특정 사업을 선택하세요(전체 사업에는 추가 불가).");
+    if (METRICS.find(m => m.brand === brand && m.code === code)) throw new Error("이 사업에 이미 있는 지표 코드입니다.");
+    if (SB) await sbUpsert("metrics", [{ brand, code, label: ko, sort: METRICS.length + 1 }], "brand,code");
+    METRICS.push({ brand, code, label: ko });
     rebuildAdsCols();
     return;
   }

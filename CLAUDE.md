@@ -19,7 +19,7 @@
 
 ## 테이블 (RLS on, anon 권한 회수됨, 뷰는 security_invoker)
 - ad_daily(date,brand,platform) 노출·클릭·광고비·전환·전환매출(+extra JSONB 커스텀열) — **911행(내일하이만 실데이터)**
-- metrics(code,label) 커스텀 지표(열) 마스터. ad_daily.extra 에 값, row.x[code] 로 다룸, 광고운영 타일 합계
+- metrics(brand,code,label) 커스텀 지표(열) — **사업별**. ad_daily.extra 에 값, row.x[code], 광고운영 타일 합계
 - business_daily(date,brand) 가입·결제·매출·refund — **0행**
 - budgets(month,brand,platform) 매체별 월예산 — **0행**
 - brands/platforms(code) 마스터, brands.active로 종료. upload_logs, profiles, section_locks
@@ -46,6 +46,6 @@ anon 전체 401, 로그인 사용자 권한상승·잠금비번 조회 전부 �
 - 04_rename_cascade.sql 적용 여부 미확인(사업 코드변경 시 필요, 이름변경은 불필요)
 - 탭별 자동 인사이트 문구(제안만 함, 미구현)
 - 미디어 믹스 AI 전략: Edge Function(smooth-handler) 배포됨. 제안 자동적용 버튼 구현됨
-- 커스텀 열: 데이터입력 광고실적 '+열 추가' → 광고운영 타일. 06_metrics.sql 적용 필요
+- 커스텀 열: 데이터입력 광고실적 '+열 추가'(사업 선택 후) → 광고운영 타일. 사업별. 06_metrics.sql 적용 필요
 
 상세 이력은 작업일지.md, 기획은 기획서.md.
