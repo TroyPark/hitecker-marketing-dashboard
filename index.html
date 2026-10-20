@@ -919,7 +919,8 @@ const SLOT_MAX = 8;
 const ADS = window.ADS_DATA || [];
 const BIZ = window.BIZ_DATA || [];
 const BUDGET = window.BUDGET_DATA || [];
-const METRICS = window.METRICS_DATA || [];   // 커스텀 지표(열): {code,label}
+const METRICS = window.METRICS_DATA || [];   // 광고 커스텀 지표(열): {brand,code,label}
+const BIZMETRICS = window.BIZMETRICS_DATA || [];   // 사업 커스텀 지표(열): {brand,code,label}
 const replaceAll = (arr, rows) => { arr.length = 0; arr.push(...rows); };
 
 let MIN_DATE, MAX_DATE;
@@ -1000,7 +1001,8 @@ const zero = () => ({ imp: 0, clk: 0, cost: 0, cv: 0, rev: 0,
                       su: 0, od: 0, rvz: 0, rfd: 0, budget: 0, x: {} });
 function addAd(a, r) { a.imp += r.imp; a.clk += r.clk; a.cost += r.cost; a.cv += r.cv; a.rev += r.rev;
   if (r.x) { a.x ||= {}; for (const k in r.x) a.x[k] = (a.x[k] || 0) + (Number(r.x[k]) || 0); } return a; }
-function addBiz(a, r) { a.su += r.su; a.od += r.od; a.rvz += r.rv; a.rfd += (r.rf || 0); return a; }
+function addBiz(a, r) { a.su += r.su; a.od += r.od; a.rvz += r.rv; a.rfd += (r.rf || 0);
+  if (r.x) { a.x ||= {}; for (const k in r.x) a.x[k] = (a.x[k] || 0) + (Number(r.x[k]) || 0); } return a; }
 
 /* rvz=매출(총), rfd=환불, net=최종매출.
    최종매출은 저장하지 않고 항상 여기서 뺀다. 환불이 정정돼도 어긋나지 않는다. */
@@ -1338,7 +1340,12 @@ function renderExec() {
   if (!biz.length) base.su = base.od = base.rvz = base.rfd = NaN;   // 0건이 아니라 "아직 없음"
   if (!base.budget) base.budget = NaN;
   const cur = derive(base);
-  tiles($("#exec-tiles"), EXEC_TILES, cur, prev, `직전 ${len}일`);
+  const seenBM = new Set(); const bizTiles = [];
+  for (const m of BIZMETRICS) if (codes.has(m.brand) && !seenBM.has(m.code)) {
+    seenBM.add(m.code);
+    bizTiles.push({ label: m.label, unit: "", upGood: true, fmt: num, get: r => (r.x && r.x[m.code] != null) ? r.x[m.code] : NaN });
+  }
+  tiles($("#exec-tiles"), EXEC_TILES.concat(bizTiles), cur, prev, `직전 ${len}일`);
 
   /* 사업별 일별 매출 */
   const dates = [...new Set(biz.map(r => r.d))].sort();
@@ -1573,11 +1580,11 @@ const SHEETS = {
       // 최종매출은 저장하지 않는다. 매출 - 환불로 그때그때 보여 준다
       { k: "net", label: "최종매출", type: "num", calc: r => (r.rv || 0) - (r.rf || 0) },
     ],
-    blank: () => ({ d: state.to, b: sheetBrandOr(), su: 0, od: 0, rv: 0, rf: 0 }),
+    blank: () => ({ d: state.to, b: sheetBrandOr(), su: 0, od: 0, rv: 0, rf: 0, x: {} }),
     match: r => inRange(r),
     conflict: "date,brand",
     toRow: r => ({ date: r.d, brand: r.b, signups: r.su, orders: r.od,
-                   revenue: r.rv, refund: r.rf || 0 }),
+                   revenue: r.rv, refund: r.rf || 0, extra: r.x || {} }),
   },
   budget: {
     title: "월별 예산", data: BUDGET, table: "budgets",
@@ -1606,7 +1613,21 @@ function metricColsFor(brand) {
   return list.map(m => ({ k: "x:" + m.code, label: m.label, type: "num", metric: true, w: 96 }));
 }
 function rebuildAdsCols() { SHEETS.ads.cols = BASE_ADS_COLS.concat(metricColsFor(state.sheetBrand)); }
-rebuildAdsCols();
+const bizMetricsFor = brand => BIZMETRICS.filter(m => m.brand === brand);
+const BASE_BIZ_COLS = SHEETS.biz.cols.slice();
+function bizMetricColsFor(brand) {
+  let list;
+  if (!brand || brand === "*") { const seen = new Set(); list = []; for (const m of BIZMETRICS) if (!seen.has(m.code)) { seen.add(m.code); list.push(m); } }
+  else list = bizMetricsFor(brand);
+  return list.map(m => ({ k: "x:" + m.code, label: m.label, type: "num", metric: true, w: 96 }));
+}
+// 계산 칸(최종매출)은 항상 맨 뒤로: 기본열(계산 제외) + 커스텀 + 계산
+function rebuildBizCols() {
+  const calc = BASE_BIZ_COLS.filter(c => c.calc);
+  const baseNoCalc = BASE_BIZ_COLS.filter(c => !c.calc);
+  SHEETS.biz.cols = baseNoCalc.concat(bizMetricColsFor(state.sheetBrand), calc);
+}
+rebuildAdsCols(); rebuildBizCols();
 
 const MAX_SHEET_ROWS = 300;
 let sheetRows = [];                 // 화면에 띄운 행 (원본 객체 참조)
@@ -1629,7 +1650,7 @@ const cellRaw = (row, col) => col.k.startsWith("x:") ? String((row.x && row.x[co
   : (col.type === "num" ? String(row[col.k] ?? 0) : String(row[col.k] ?? ""));
 
 function buildSheet() {
-  rebuildAdsCols();                 // 선택한 사업에 맞춰 커스텀 열 재구성
+  rebuildAdsCols(); rebuildBizCols();   // 선택한 사업에 맞춰 커스텀 열 재구성
   const cfg = SHEETS[state.sheet];
   $("#sheet-title").textContent = cfg.title;
   const all = cfg.data.filter(cfg.match)
@@ -2168,8 +2189,8 @@ function render() {
 
   // 매체 탭은 광고 실적·월별 예산 시트에서만 쓴다
   $("#sheet-plats").classList.toggle("hide", state.sheet === "biz");
-  // 열 추가는 광고 실적 시트에서만
-  $("#sheet-addcol").hidden = state.sheet !== "ads";
+  // 열 추가는 광고 실적·사업 실적 시트에서
+  $("#sheet-addcol").hidden = !(state.sheet === "ads" || state.sheet === "biz");
 
   if (isExec) renderExec();
   else if (isAds) renderAds();
@@ -2183,7 +2204,7 @@ const MAP_IN = {
   ad: r => ({ d: r.date, b: r.brand, p: r.platform, imp: +r.impressions, clk: +r.clicks,
               cost: +r.adcost, cv: +r.conversions, rev: +r.conv_value, x: r.extra || {} }),
   biz: r => ({ d: r.date, b: r.brand, su: +r.signups, od: +r.orders,
-               rv: +r.revenue, rf: +(r.refund || 0) }),
+               rv: +r.revenue, rf: +(r.refund || 0), x: r.extra || {} }),
   budget: r => ({ m: String(r.month).slice(0, 7), b: r.brand, p: r.platform, amt: +r.amount }),
 };
 
@@ -2217,7 +2238,10 @@ async function loadDataInner() {
   let mt = [];
   try { mt = await sbSelect("metrics", "select=*&order=sort.asc"); } catch { mt = []; }
   replaceAll(METRICS, (mt || []).filter(m => m.active !== false).map(m => ({ brand: m.brand, code: m.code, label: m.label })));
-  rebuildAdsCols();
+  let bmt = [];
+  try { bmt = await sbSelect("biz_metrics", "select=*&order=sort.asc"); } catch { bmt = []; }
+  replaceAll(BIZMETRICS, (bmt || []).filter(m => m.active !== false).map(m => ({ brand: m.brand, code: m.code, label: m.label })));
+  rebuildAdsCols(); rebuildBizCols();
   state.brands = new Set(BRANDS.filter(b => b.active !== false).map(b => b.code));
   state.channels = new Set(PLATFORMS.map(p => p.code));
   if (!P_BY[state.detail]) state.detail = PLATFORMS[0]?.code || "";
@@ -2428,7 +2452,7 @@ $("#sheet").addEventListener("focusin", e => {
 });
 $("#sheet-addcol").onclick = () => {
   if (state.sheetBrand === "*") return toast("사업을 먼저 선택하세요 (전체 사업에는 열 추가 불가)");
-  openMaster("metric");
+  openMaster(state.sheet === "biz" ? "bizmetric" : "metric");
 };
 $("#sheet-add").onclick = () => {
   const cfg = SHEETS[state.sheet];
@@ -2802,13 +2826,14 @@ addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if 
 let modalKind = "brand";
 let editingCode = null;          // null 이면 추가, 값이 있으면 그 사업을 수정
 
-const KIND_KO = { brand: "사업", platform: "매체", metric: "지표(열)" };
+const KIND_KO = { brand: "사업", platform: "매체", metric: "지표(열)", bizmetric: "지표(열)" };
 function openMaster(kind, code) {
   modalKind = kind;
   editingCode = code || null;
   const editing = Boolean(code);
   const noun = KIND_KO[kind] || "항목";
-  $("#modal-title").textContent = (kind === "metric" && state.sheetBrand !== "*" ? brandKo(state.sheetBrand) + " " : "")
+  const isMetric = kind === "metric" || kind === "bizmetric";
+  $("#modal-title").textContent = (isMetric && state.sheetBrand !== "*" ? brandKo(state.sheetBrand) + " " : "")
     + noun + (editing ? " 수정" : " 추가");
   $("#m-ko-label").textContent = noun + "명";
   $("#m-ko").placeholder = kind === "brand" ? "예: 내일하이" : kind === "platform" ? "예: 카카오 모먼트" : "예: 영상 조회수";
@@ -2820,6 +2845,7 @@ function openMaster(kind, code) {
   $("#m-code-hint").textContent = editing
     ? "바꾸면 이 사업의 광고·사업실적·예산 데이터가 모두 새 코드로 따라갑니다"
     : (kind === "metric" ? "영문·숫자·밑줄. 광고 실적 숫자 열로 추가되고 광고 운영 타일에 합계로 표시됩니다"
+       : kind === "bizmetric" ? "영문·숫자·밑줄. 사업 실적 숫자 열로 추가되고 경영 대시보드 타일에 합계로 표시됩니다"
                          : "영문·숫자·밑줄. 저장 후에도 바꿀 수 있습니다");
   $("#modal-ok").textContent = editing ? "저장" : "추가";
   $("#modal-err").textContent = "";
@@ -2866,13 +2892,16 @@ async function editBrand(oldCode, newCode, ko) {
 const closeMaster = () => { $("#modal").hidden = true; };
 
 async function addMaster(kind, code, ko, channel) {
-  if (kind === "metric") {
+  if (kind === "metric" || kind === "bizmetric") {
     const brand = state.sheetBrand;
     if (!brand || brand === "*") throw new Error("먼저 특정 사업을 선택하세요(전체 사업에는 추가 불가).");
-    if (METRICS.find(m => m.brand === brand && m.code === code)) throw new Error("이 사업에 이미 있는 지표 코드입니다.");
-    if (SB) await sbUpsert("metrics", [{ brand, code, label: ko, sort: METRICS.length + 1 }], "brand,code");
-    METRICS.push({ brand, code, label: ko });
-    rebuildAdsCols();
+    const biz = kind === "bizmetric";
+    const list = biz ? BIZMETRICS : METRICS;
+    const table = biz ? "biz_metrics" : "metrics";
+    if (list.find(m => m.brand === brand && m.code === code)) throw new Error("이 사업에 이미 있는 지표 코드입니다.");
+    if (SB) await sbUpsert(table, [{ brand, code, label: ko, sort: list.length + 1 }], "brand,code");
+    list.push({ brand, code, label: ko });
+    if (biz) rebuildBizCols(); else rebuildAdsCols();
     return;
   }
   const dup = kind === "brand" ? B_BY[code] : P_BY[code];
