@@ -875,6 +875,17 @@ function sbSignOut() {
 }
 
 const sbSelect = (table, qs) => sbFetch(`/rest/v1/${table}?${qs}`);
+/* 서버 max-rows(보통 1000) 제한을 넘어 전부 가져온다 */
+async function sbSelectAll(table, qs, page = 1000) {
+  let out = [], from = 0;
+  for (;;) {
+    const chunk = await sbFetch(`/rest/v1/${table}?${qs}&limit=${page}&offset=${from}`);
+    out = out.concat(chunk);
+    if (!chunk.length || chunk.length < page) break;
+    from += page;
+  }
+  return out;
+}
 const sbUpsert = (table, rows, onConflict) =>
   sbFetch(`/rest/v1/${table}?on_conflict=${onConflict}`, {
     method: "POST",
@@ -2248,9 +2259,9 @@ async function loadDataInner() {
   if (!B_BY[state.brand]) state.brand = BRANDS[0]?.code || "";
 
   const [ad, biz, bud] = await Promise.all([
-    sbSelect("ad_daily", "select=*&order=date.asc&limit=100000"),
-    sbSelect("business_daily", "select=*&order=date.asc&limit=100000"),
-    sbSelect("budgets", "select=*&order=month.asc&limit=10000"),
+    sbSelectAll("ad_daily", "select=*&order=date.asc"),
+    sbSelectAll("business_daily", "select=*&order=date.asc"),
+    sbSelectAll("budgets", "select=*&order=month.asc"),
   ]);
   replaceAll(ADS, ad.map(MAP_IN.ad));
   replaceAll(BIZ, biz.map(MAP_IN.biz));

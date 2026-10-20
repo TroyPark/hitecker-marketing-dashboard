@@ -32,6 +32,7 @@
 - 미집행/빈값은 `-` 또는 NaN → "데이터 없음". 없는 값 지어내지 않음
 
 ## 개발 시 주의 (겪은 것)
+- Supabase PostgREST max-rows(기본 1000) 제한: 큰 테이블은 sbSelectAll(offset 페이지네이션)로 전부 로드. limit=100000 으로는 1000에서 잘림(최신 업로드분이 안 보였던 원인)
 - `.ps1`은 UTF-8 **BOM** 필수(PS 5.1 한글 깨짐). gitignore는 줄끝 주석 금지
 - index.html 문자열로 자르지 말 것 — 전에 핸들러가 통째로 날아감. 앵커는 유니크하게
 - 날짜는 UTF-8 아니라 UTC 계산(KST 하루밀림). 커밋에 .env/config.js/data.js/xlsx 절대 금지
