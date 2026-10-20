@@ -646,6 +646,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
           <div><h3 id="sheet-title">광고 실적</h3>
             <p class="cap">방향키 이동 · Enter 편집 · Tab 다음 칸 · 엑셀 범위 Ctrl+V 붙여넣기</p></div>
           <div class="tools">
+            <button class="btn" id="data-export">엑셀 다운로드</button>
             <button class="btn" id="sheet-add">행 추가</button>
             <button class="btn" id="sheet-addcol" hidden>+ 열 추가</button>
             <button class="btn" id="sheet-reset" disabled>되돌리기</button>
@@ -665,7 +666,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
           <div class="card-head">
             <div><h3>엑셀 업로드</h3>
               <p class="cap">양식이 없으면 먼저 템플릿을 받아 채워 오세요</p></div>
-            <div class="tools"><button class="btn" id="data-export">엑셀 다운로드</button><button class="btn" id="tpl-download">템플릿 받기</button></div>
+            <div class="tools"><button class="btn" id="tpl-download">템플릿 받기</button></div>
           </div>
           <input type="file" id="file-input" accept=".xlsx,.xls,.csv" hidden>
           <div class="dropzone" id="dropzone">
