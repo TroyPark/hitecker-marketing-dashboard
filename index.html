@@ -2681,6 +2681,14 @@ async function handleUpload(file) {
   }
 
   const cfg = SHEETS[parsed.sheetKey];
+  // 같은 키(날짜·사업·매체 등)가 파일/시트에 중복되면 한 배치에서 Postgres 가 거부한다.
+  // 뒤에 온 값으로 병합해 하나만 남긴다. (예: 원본 엑셀 (RAW)KFO 헤더가 Learnershigh_ 로 잘못 붙은 경우)
+  {
+    const seen = new Map();
+    for (const r of parsed.rows) seen.set(rowKey(parsed.sheetKey, r), r);
+    parsed.dupMerged = parsed.rows.length - seen.size;
+    parsed.rows = [...seen.values()];
+  }
   if (!parsed.rows.length) {
     box.innerHTML = `<div class="banner" style="border-left-color:var(--critical);margin:0">
       <div><b>넣을 행이 없습니다</b> — ${parsed.from}
@@ -2696,7 +2704,7 @@ async function handleUpload(file) {
   box.innerHTML =
     `<div class="banner" style="border-left-color:var(--${errors.length ? "warning" : "good"});margin:0">
        <div><b>${file.name}</b> · ${parsed.from} → <b>${cfg.title}</b> (${cfg.table})<br>
-       ${num(parsed.rows.length)}행 · 신규 ${num(fresh)} / 갱신 ${num(parsed.rows.length - fresh)}
+       ${num(parsed.rows.length)}행 · 신규 ${num(fresh)} / 갱신 ${num(parsed.rows.length - fresh)}${parsed.dupMerged ? ` / 중복 ${num(parsed.dupMerged)}행 병합` : ""}
        ${errors.length ? ` / <span style="color:var(--critical)">건너뜀 ${num(errors.length)}</span>` : ""}
        ${dates.length ? `<br>${dates[0]} ~ ${dates[dates.length - 1]}` : ""}
        ${brands.length ? ` · ${brands.join(", ")}` : ""}
