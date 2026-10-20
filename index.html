@@ -665,7 +665,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
           <div class="card-head">
             <div><h3>엑셀 업로드</h3>
               <p class="cap">양식이 없으면 먼저 템플릿을 받아 채워 오세요</p></div>
-            <div class="tools"><button class="btn" id="tpl-download">템플릿 받기</button></div>
+            <div class="tools"><button class="btn" id="data-export">엑셀 다운로드</button><button class="btn" id="tpl-download">템플릿 받기</button></div>
           </div>
           <input type="file" id="file-input" accept=".xlsx,.xls,.csv" hidden>
           <div class="dropzone" id="dropzone">
@@ -2525,6 +2525,38 @@ $("#tpl-download").onclick = () => {
   a.remove();
   URL.revokeObjectURL(url);
   toast(`${cfg.title} 템플릿을 내려받았습니다`);
+};
+
+/* 현재 시트(광고/사업/예산)의 실제 데이터를 .xlsx 로 내려받는다. 현재 사업·매체·기간 필터 반영. */
+$("#data-export").onclick = async () => {
+  const cfg = SHEETS[state.sheet];
+  const rows = cfg.data.filter(cfg.match)
+    .filter(r => state.sheetBrand === "*" || r.b === state.sheetBrand);
+  if (!rows.length) return toast("내려받을 데이터가 없습니다");
+  const cell = (r, c) => {
+    if (c.calc) return c.calc(r);
+    if (c.k.startsWith("x:")) return Number((r.x && r.x[c.k.slice(2)]) || 0);
+    if (c.k === "b") return brandKo(r.b);
+    if (c.k === "p") return platKo(r.p);
+    if (c.type === "num") return Number(r[c.k] || 0);
+    return r[c.k] ?? "";
+  };
+  const aoa = [cfg.cols.map(c => c.label)].concat(rows.map(r => cfg.cols.map(c => cell(r, c))));
+  const btn = $("#data-export");
+  btn.disabled = true;
+  try {
+    const XLSX = await loadSheetJS();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, cfg.title.slice(0, 31));
+    const who = state.sheetBrand === "*" ? "전체" : state.sheetBrand;
+    XLSX.writeFile(wb, `${cfg.table}_${who}_${state.from}~${state.to}.xlsx`);
+    toast(`${cfg.title} ${num(rows.length)}행 내려받음`);
+  } catch (err) {
+    toast("다운로드 실패: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
 };
 
 /* ══ 파일 업로드 ══════════════════════════════════════════════
