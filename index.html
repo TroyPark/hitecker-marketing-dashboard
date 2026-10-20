@@ -357,6 +357,8 @@ td .mix-in:focus { outline: 2px solid var(--brand-accent); outline-offset: -1px;
 .col-row button:disabled { opacity: .35; cursor: not-allowed; }
 .col-row .del { color: var(--critical); }
 .col-empty { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
+.tile-bar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.col-row input[type=checkbox] { width: 16px; height: 16px; margin: 0 4px 0 0; }
 
 /* ── ON/OFF 스위치 ───────────────────────────────────────────── */
 .pw-row {
@@ -514,8 +516,8 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
       <div class="grid2">
         <div class="card">
           <div class="card-head">
-            <div><h3>사업별 일별 최종매출</h3><p class="cap">매출 − 환불</p></div>
-            <div class="tools"><button class="toggle-table" data-tt="rev">표로 보기</button></div>
+            <div><h3>사업별 일별 추이</h3><p class="cap" id="rev-cap">매출 − 환불</p></div>
+            <div class="tools"><select id="exec-metric"></select><button class="toggle-table" data-tt="rev">표로 보기</button></div>
           </div>
           <div class="legend" id="rev-legend"></div>
           <div class="plot" id="rev-plot"></div>
@@ -555,6 +557,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
 
     <!-- ══ 광고 운영 ══════════════════════════════════════════ -->
     <section id="page-ads" hidden>
+      <div class="tile-bar"><button class="btn" id="ads-tile-edit">타일 관리</button></div>
       <div class="tiles five" id="ads-tiles"></div>
 
       <div class="grid2">
@@ -721,6 +724,19 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
     </div>
     <p class="lock-contact">문의 : 마케팅팀 박영주 팀장 010-4037-0928</p>
   </form>
+</div>
+
+<!-- 광고 운영 타일 관리 (표시·순서) -->
+<div class="modal-back" id="tilemodal" hidden>
+  <div class="modal">
+    <h3 id="tilemodal-title">타일 관리</h3>
+    <p class="cap" style="margin:-8px 0 12px">보일 타일을 체크하고 ↑↓로 순서를 바꿉니다. 사업별로 이 브라우저에 저장됩니다.</p>
+    <div id="tilemodal-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="tilemodal-reset">기본값</button>
+      <button type="button" class="btn solid" id="tilemodal-close">닫기</button>
+    </div>
+  </div>
 </div>
 
 <!-- 커스텀 열 관리 (순서·삭제·이름변경) -->
@@ -982,6 +998,7 @@ const state = {
   sheetPlat: "*",
   detail: "Meta_sponsored",
   trendMetric: "combo",
+  execMetric: "net",
   execSort: { key: "rv", dir: -1 },
   adsSort:  { key: "cost", dir: -1 },
   sheet: "ads",
@@ -1379,17 +1396,34 @@ function renderExec() {
   }
   tiles($("#exec-tiles"), EXEC_TILES.concat(bizTiles), cur, prev, `직전 ${len}일`);
 
-  /* 사업별 일별 매출 */
-  const dates = [...new Set(biz.map(r => r.d))].sort();
+  /* 사업별 일별 추이 — 지표 선택 (기본 최종매출) */
+  const execOpts = [
+    { v: "net", label: "최종매출", cap: "매출 − 환불", src: "biz", fmt: won, get: r => r.rv - (r.rf || 0) },
+    { v: "rv", label: "매출", src: "biz", fmt: won, get: r => r.rv },
+    { v: "rf", label: "환불", src: "biz", fmt: won, get: r => r.rf || 0 },
+    { v: "od", label: "결제수", src: "biz", fmt: num, get: r => r.od },
+    { v: "su", label: "회원가입", src: "biz", fmt: num, get: r => r.su },
+    { v: "cost", label: "광고비", src: "ads", fmt: won, get: r => r.cost },
+  ];
+  for (const m of BIZMETRICS) if (codes.has(m.brand) && !execOpts.some(o => o.v === "x:" + m.code))
+    execOpts.push({ v: "x:" + m.code, label: m.label, src: "biz", fmt: num, get: r => (r.x && r.x[m.code]) || 0 });
+  if (!execOpts.some(o => o.v === state.execMetric)) state.execMetric = "net";
+  const eo = execOpts.find(o => o.v === state.execMetric);
+  $("#exec-metric").innerHTML = execOpts.map(o =>
+    `<option value="${o.v}"${o.v === eo.v ? " selected" : ""}>${o.label}</option>`).join("");
+  $("#rev-cap").textContent = eo.cap || eo.label;
+
+  const srcRows = eo.src === "ads" ? ads : biz;
+  const dates = [...new Set(srcRows.map(r => r.d))].sort();
   const perBrandDate = {};
-  biz.forEach(r => ((perBrandDate[r.b] ||= {})[r.d] =
-    (perBrandDate[r.b][r.d] || 0) + (r.rv - (r.rf || 0))));   // 최종매출 기준
+  srcRows.forEach(r => ((perBrandDate[r.b] ||= {})[r.d] = (perBrandDate[r.b][r.d] || 0) + eo.get(r)));
   const series = brands
     .filter(b => Object.keys(perBrandDate[b.code] || {}).length)
     .map(b => ({ name: b.ko, color: brandColor(b.code), values: dates.map(d => (perBrandDate[b.code] || {})[d] || 0) }));
   $("#rev-legend").innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("");
-  lineChart($("#rev-plot"), { dates, series, endLabels: series.length <= 2,
-    empty: "매출 데이터가 없습니다. 데이터 입력 › 사업 실적에서 채워 주세요." });
+  lineChart($("#rev-plot"), { dates, series, yFmt: eo.fmt, endLabels: series.length <= 2,
+    empty: eo.src === "ads" ? "광고 데이터가 없습니다."
+      : `${eo.label} 데이터가 없습니다. 데이터 입력 › 사업 실적에서 채워 주세요.` });
   simpleTable($("#rev-table"), [["날짜", d => d]].concat(
     series.map((s, i) => [s.name, d => num(s.values[dates.indexOf(d)])])), [...dates].reverse());
 
@@ -1462,6 +1496,34 @@ const ADS_TILES = [
   { key: "cpa",  label: "CPA",    fmt: v => (isFinite(v) ? won(v) : "–"), unit: "원", upGood: false },
   { key: "roasAd", label: "ROAS", fmt: pct0, unit: "", upGood: true },
 ];
+// 기본은 꺼져 있고 '타일 관리'에서 켤 수 있는 타일
+const ADS_TILES_EXTRA = [
+  { key: "imp", label: "노출수",   fmt: num, unit: "회", upGood: true, off: true },
+  { key: "rev", label: "전환매출", fmt: won, unit: "원", upGood: true, off: true },
+  { key: "ctr", label: "CTR",      fmt: pct, unit: "", upGood: true, off: true },
+  { key: "cpc", label: "CPC",      fmt: v => (isFinite(v) ? won(v) : "–"), unit: "원", upGood: false, off: true },
+];
+/* 이 사업에서 쓸 수 있는 타일 전체 (id 부여) */
+function adsTileDefs(brand) {
+  return ADS_TILES.map(d => ({ ...d, id: d.key }))
+    .concat(ADS_TILES_EXTRA.map(d => ({ ...d, id: d.key })))
+    .concat(metricsFor(brand).map(m => ({ id: "x:" + m.code, label: m.label, unit: "", upGood: true, fmt: num,
+      get: r => (r.x && r.x[m.code] != null) ? r.x[m.code] : NaN })));
+}
+const tileKey = brand => "hm.adsTiles." + brand;
+/* 저장된 순서·표시 + 새로 생긴 타일은 뒤에 붙인다 */
+function adsTileLayout(brand) {
+  const defs = adsTileDefs(brand);
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(tileKey(brand)) || "[]"); } catch (e) {}
+  const ids = new Set(defs.map(d => d.id));
+  const out = saved.filter(t => ids.has(t.id));
+  const have = new Set(out.map(t => t.id));
+  defs.forEach(d => { if (!have.has(d.id)) out.push({ id: d.id, on: !d.off }); });
+  return out;
+}
+const saveTileLayout = (brand, layout) => localStorage.setItem(tileKey(brand), JSON.stringify(layout));
+
 const PERF_COLS = [
   { key: "name",   label: "매체",     f: r => `<span class="cell-name"><i style="background:${r.color}"></i>${r.name}</span>`, t: () => "합계" },
   { key: "imp",    label: "노출수",   f: r => num(r.imp),  t: r => num(r.imp) },
@@ -1492,8 +1554,8 @@ function renderAds() {
   cur.budget = sumBud(budCur);  cur.used = cur.budget ? cur.cost / cur.budget : NaN;
   prev.budget = sumBud(budPrev); prev.used = prev.budget ? prev.cost / prev.budget : NaN;
 
-  const adsTiles = ADS_TILES.concat(metricsFor(state.brand).map(m =>
-    ({ label: m.label, unit: "", upGood: true, fmt: num, get: r => (r.x && r.x[m.code] != null) ? r.x[m.code] : NaN })));
+  const tileDefs = Object.fromEntries(adsTileDefs(state.brand).map(d => [d.id, d]));
+  const adsTiles = adsTileLayout(state.brand).filter(t => t.on).map(t => tileDefs[t.id]);
   tiles($("#ads-tiles"), adsTiles, cur, prev, `직전 ${len}일`, "five");
 
   const dates = [...new Set(rowsAll.map(r => r.d))].sort();
@@ -2483,6 +2545,32 @@ document.querySelectorAll(".toggle-table").forEach(b => b.onclick = () => {
 });
 $("#detail-select").onchange = e => { state.detail = e.target.value; renderAdDetail(); };
 $("#trend-metric").onchange = e => { state.trendMetric = e.target.value; render(); };
+$("#exec-metric").onchange = e => { state.execMetric = e.target.value; render(); };
+
+/* ── 광고 운영 타일 관리 ── */
+function renderTileManager() {
+  const brand = state.brand;
+  const defs = Object.fromEntries(adsTileDefs(brand).map(d => [d.id, d]));
+  const layout = adsTileLayout(brand);
+  $("#tilemodal-title").textContent = `${brandKo(brand)} · 타일 관리`;
+  const host = $("#tilemodal-list"); host.innerHTML = "";
+  const commit = () => { saveTileLayout(brand, layout); renderTileManager(); render(); };
+  layout.forEach((t, i) => {
+    const row = el("div", { class: "col-row", html:
+      `<input type="checkbox" ${t.on ? "checked" : ""}>
+       <span class="nm">${defs[t.id].label}</span>
+       <button data-up ${i === 0 ? "disabled" : ""}>↑</button>
+       <button data-down ${i === layout.length - 1 ? "disabled" : ""}>↓</button>` });
+    row.querySelector("input").onchange = e => { t.on = e.target.checked; commit(); };
+    row.querySelector("[data-up]").onclick = () => { [layout[i - 1], layout[i]] = [layout[i], layout[i - 1]]; commit(); };
+    row.querySelector("[data-down]").onclick = () => { [layout[i + 1], layout[i]] = [layout[i], layout[i + 1]]; commit(); };
+    host.append(row);
+  });
+}
+$("#ads-tile-edit").onclick = () => { renderTileManager(); $("#tilemodal").hidden = false; };
+$("#tilemodal-close").onclick = () => { $("#tilemodal").hidden = true; };
+$("#tilemodal-reset").onclick = () => { localStorage.removeItem(tileKey(state.brand)); renderTileManager(); render(); };
+$("#tilemodal").addEventListener("click", e => { if (e.target.id === "tilemodal") $("#tilemodal").hidden = true; });
 
 const confirmDiscard = () =>
   !dirty.size || confirm("저장하지 않은 수정이 있습니다. 탭을 바꾸면 사라집니다. 계속할까요?");
