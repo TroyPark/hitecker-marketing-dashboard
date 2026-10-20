@@ -349,6 +349,14 @@ td .mix-in:focus { outline: 2px solid var(--brand-accent); outline-offset: -1px;
 .modal-err { min-height: 18px; margin: 2px 0 0; font-size: 12px; color: var(--critical); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .add-btn { border-style: dashed !important; color: var(--text-muted); }
+.col-row { display: flex; align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--grid); }
+.col-row:last-child { border-bottom: 0; }
+.col-row .nm { flex: 1; font-size: 13px; }
+.col-row button { border: 1px solid var(--border); background: var(--surface-1); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+.col-row button:hover { background: var(--plane); }
+.col-row button:disabled { opacity: .35; cursor: not-allowed; }
+.col-row .del { color: var(--critical); }
+.col-empty { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
 
 /* ── ON/OFF 스위치 ───────────────────────────────────────────── */
 .pw-row {
@@ -649,6 +657,7 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
             <button class="btn" id="data-export">엑셀 다운로드</button>
             <button class="btn" id="sheet-add">행 추가</button>
             <button class="btn" id="sheet-addcol" hidden>+ 열 추가</button>
+            <button class="btn" id="sheet-editcol" hidden>열 관리</button>
             <button class="btn" id="sheet-reset" disabled>되돌리기</button>
             <button class="btn solid" id="sheet-save" disabled>저장</button>
           </div>
@@ -712,6 +721,16 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
     </div>
     <p class="lock-contact">문의 : 마케팅팀 박영주 팀장 010-4037-0928</p>
   </form>
+</div>
+
+<!-- 커스텀 열 관리 (순서·삭제·이름변경) -->
+<div class="modal-back" id="colmodal" hidden>
+  <div class="modal">
+    <h3 id="colmodal-title">열 관리</h3>
+    <p class="cap" style="margin:-8px 0 12px">커스텀 열만 순서 변경·이름변경·삭제할 수 있습니다. 기본 열은 고정입니다.</p>
+    <div id="colmodal-list"></div>
+    <div class="modal-actions"><button type="button" class="btn solid" id="colmodal-close">닫기</button></div>
+  </div>
 </div>
 
 <!-- 사업 / 매체 추가 -->
@@ -2201,8 +2220,10 @@ function render() {
 
   // 매체 탭은 광고 실적·월별 예산 시트에서만 쓴다
   $("#sheet-plats").classList.toggle("hide", state.sheet === "biz");
-  // 열 추가는 광고 실적·사업 실적 시트에서
-  $("#sheet-addcol").hidden = !(state.sheet === "ads" || state.sheet === "biz");
+  // 열 추가·관리는 광고 실적·사업 실적 시트에서
+  const canCol = (state.sheet === "ads" || state.sheet === "biz");
+  $("#sheet-addcol").hidden = !canCol;
+  $("#sheet-editcol").hidden = !canCol;
 
   if (isExec) renderExec();
   else if (isAds) renderAds();
@@ -2466,6 +2487,93 @@ $("#sheet-addcol").onclick = () => {
   if (state.sheetBrand === "*") return toast("사업을 먼저 선택하세요 (전체 사업에는 열 추가 불가)");
   openMaster(state.sheet === "biz" ? "bizmetric" : "metric");
 };
+
+/* ── 커스텀 열 관리 (순서·이름·삭제) ─────────────────────────── */
+const sheetMetricArr = () => (state.sheet === "biz" ? BIZMETRICS : METRICS);
+const sheetMetricTable = () => (state.sheet === "biz" ? "biz_metrics" : "metrics");
+const rebuildCurSheetCols = () => { rebuildAdsCols(); rebuildBizCols(); };
+
+function renderColManager() {
+  const brand = state.sheetBrand;
+  const arr = sheetMetricArr();
+  const list = arr.filter(m => m.brand === brand);
+  const host = $("#colmodal-list");
+  $("#colmodal-title").textContent = `${brandKo(brand)} · ${SHEETS[state.sheet].title} 열 관리`;
+  host.innerHTML = "";
+  if (!list.length) { host.innerHTML = `<p class="col-empty">추가한 커스텀 열이 없습니다. '+ 열 추가'로 만드세요.</p>`; return; }
+  list.forEach((m, i) => {
+    const row = el("div", { class: "col-row", html:
+      `<span class="nm">${m.label} <span style="color:var(--text-muted);font-size:11px">${m.code}</span></span>
+       <button data-up ${i === 0 ? "disabled" : ""}>↑</button>
+       <button data-down ${i === list.length - 1 ? "disabled" : ""}>↓</button>
+       <button data-ren>이름변경</button>
+       <button class="del" data-del>삭제</button>` });
+    row.querySelector("[data-up]").onclick = () => moveMetric(m.code, -1);
+    row.querySelector("[data-down]").onclick = () => moveMetric(m.code, 1);
+    row.querySelector("[data-ren]").onclick = () => renameMetric(m.code, m.label);
+    row.querySelector("[data-del]").onclick = () => deleteMetric(m.code, m.label);
+    host.append(row);
+  });
+}
+
+async function persistOrder() {
+  const arr = sheetMetricArr(), table = sheetMetricTable(), brand = state.sheetBrand;
+  const list = arr.filter(m => m.brand === brand);
+  if (SB) await sbUpsert(table, list.map((m, i) => ({ brand, code: m.code, label: m.label, sort: i + 1 })), "brand,code");
+}
+
+async function moveMetric(code, dir) {
+  const arr = sheetMetricArr(), brand = state.sheetBrand;
+  const list = arr.filter(m => m.brand === brand);
+  const i = list.findIndex(m => m.code === code), j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  const a = list[i], b = list[j];
+  const ia = arr.indexOf(a), ib = arr.indexOf(b);
+  [arr[ia], arr[ib]] = [arr[ib], arr[ia]];        // 전역 배열에서 교환
+  rebuildCurSheetCols();
+  renderColManager();
+  if (!$("#page-input").hidden) buildSheet();
+  render();
+  try { await persistOrder(); } catch (e) { toast("순서 저장 실패: " + e.message); }
+}
+
+async function renameMetric(code, cur) {
+  const label = prompt("새 이름", cur);
+  if (label == null) return;
+  const v = label.trim(); if (!v) return;
+  const arr = sheetMetricArr(), table = sheetMetricTable(), brand = state.sheetBrand;
+  const m = arr.find(x => x.brand === brand && x.code === code); if (!m) return;
+  m.label = v;
+  rebuildCurSheetCols(); renderColManager();
+  if (!$("#page-input").hidden) buildSheet();
+  render();
+  try { if (SB) await sbUpsert(table, [{ brand, code, label: v }], "brand,code"); toast("이름을 바꿨습니다"); }
+  catch (e) { toast("저장 실패: " + e.message); }
+}
+
+async function deleteMetric(code, label) {
+  if (!confirm(`'${label}' 열을 삭제할까요?
+이미 입력된 값은 남지만 화면·타일에서 사라집니다.`)) return;
+  const arr = sheetMetricArr(), table = sheetMetricTable(), brand = state.sheetBrand;
+  try {
+    if (SB) await sbFetch(`/rest/v1/${table}?brand=eq.${encodeURIComponent(brand)}&code=eq.${encodeURIComponent(code)}`,
+      { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  } catch (e) { return toast("삭제 실패: " + e.message); }
+  const i = arr.findIndex(m => m.brand === brand && m.code === code);
+  if (i >= 0) arr.splice(i, 1);
+  rebuildCurSheetCols(); renderColManager();
+  if (!$("#page-input").hidden) buildSheet();
+  render();
+  toast("열을 삭제했습니다");
+}
+
+$("#sheet-editcol").onclick = () => {
+  if (state.sheetBrand === "*") return toast("사업을 먼저 선택하세요");
+  renderColManager();
+  $("#colmodal").hidden = false;
+};
+$("#colmodal-close").onclick = () => { $("#colmodal").hidden = true; };
+$("#colmodal").addEventListener("click", e => { if (e.target.id === "colmodal") $("#colmodal").hidden = true; });
 $("#sheet-add").onclick = () => {
   const cfg = SHEETS[state.sheet];
   const row = cfg.blank();
