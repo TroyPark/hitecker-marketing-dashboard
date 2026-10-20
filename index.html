@@ -560,8 +560,8 @@ nav button .lock-ico { float: right; color: var(--text-muted); font-size: 11px; 
       <div class="grid2">
         <div class="card">
           <div class="card-head">
-            <div><h3>일별 광고비 · 전환매출</h3><p class="cap">예산 입력 시 일 예산 배분선 표시</p></div>
-            <div class="tools"><button class="toggle-table" data-tt="trend">표로 보기</button></div>
+            <div><h3>일별 추이</h3><p class="cap">지표를 골라 일별 추이를 봅니다</p></div>
+            <div class="tools"><select id="trend-metric"></select><button class="toggle-table" data-tt="trend">표로 보기</button></div>
           </div>
           <div class="legend" id="trend-legend"></div>
           <div class="plot" id="trend-plot"></div>
@@ -981,6 +981,7 @@ const state = {
   sheetBrand: "*",                            // 데이터 입력: 전체 또는 단일
   sheetPlat: "*",
   detail: "Meta_sponsored",
+  trendMetric: "combo",
   execSort: { key: "rv", dir: -1 },
   adsSort:  { key: "cost", dir: -1 },
   sheet: "ads",
@@ -1498,8 +1499,6 @@ function renderAds() {
   const dates = [...new Set(rowsAll.map(r => r.d))].sort();
   const byDate = Object.fromEntries(dates.map(d => [d, zero()]));
   rowsAll.forEach(r => addAd(byDate[r.d], r));
-  const s1 = { name: "광고비", color: cssVar("--series-1"), values: dates.map(d => byDate[d].cost), area: true };
-  const s2 = { name: "전환매출", color: cssVar("--series-2"), values: dates.map(d => byDate[d].rev) };
   // 일 예산 배분선: 그 날이 속한 달의 (선택 매체) 예산을 그 달 일수로 나눈 값
   const dailyBud = d => {
     const m = d.slice(0, 7), [y, mo] = m.split("-").map(Number);
@@ -1509,10 +1508,35 @@ function renderAds() {
       if (r.b === state.brand && r.m === m && state.channels.has(r.p)) sum += r.amt;
     return sum / dim;
   };
-  const series = [s1, s2];
-  if (cur.budget > 0) series.push({ name: "일 예산", color: cssVar("--series-4"), values: dates.map(dailyBud) });
+  // 선택 가능한 지표: 기본 지표 + 이 사업의 커스텀 열
+  const trendOpts = [
+    { v: "combo", label: "광고비 · 전환매출" },
+    { v: "cost", label: "광고비", fmt: won, get: a => a.cost },
+    { v: "rev", label: "전환매출", fmt: won, get: a => a.rev },
+    { v: "imp", label: "노출수", fmt: num, get: a => a.imp },
+    { v: "clk", label: "클릭수", fmt: num, get: a => a.clk },
+    { v: "cv", label: "전환", fmt: num, get: a => a.cv },
+  ].concat(metricsFor(state.brand).map(m =>
+    ({ v: "x:" + m.code, label: m.label, fmt: num, get: a => (a.x && a.x[m.code]) || 0 })));
+  if (!trendOpts.some(o => o.v === state.trendMetric)) state.trendMetric = "combo";
+  $("#trend-metric").innerHTML = trendOpts.map(o =>
+    `<option value="${o.v}"${o.v === state.trendMetric ? " selected" : ""}>${o.label}</option>`).join("");
+
+  let series;
+  if (state.trendMetric === "combo") {
+    series = [
+      { name: "광고비", color: cssVar("--series-1"), values: dates.map(d => byDate[d].cost), area: true },
+      { name: "전환매출", color: cssVar("--series-2"), values: dates.map(d => byDate[d].rev) },
+    ];
+    if (cur.budget > 0) series.push({ name: "일 예산", color: cssVar("--series-4"), values: dates.map(dailyBud) });
+  } else {
+    const o = trendOpts.find(x => x.v === state.trendMetric);
+    series = [{ name: o.label, color: cssVar("--series-1"), values: dates.map(d => o.get(byDate[d])), area: true }];
+  }
+  const yFmt = state.trendMetric === "combo" ? won
+    : (trendOpts.find(x => x.v === state.trendMetric).fmt || num);
   $("#trend-legend").innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("");
-  lineChart($("#trend-plot"), { dates, series });
+  lineChart($("#trend-plot"), { dates, series, yFmt });
   simpleTable($("#trend-table"), [["날짜", d => d], ["광고비", d => num(byDate[d].cost)],
     ["전환", d => num(byDate[d].cv)], ["전환매출", d => num(byDate[d].rev)]], [...dates].reverse());
 
@@ -2458,6 +2482,7 @@ document.querySelectorAll(".toggle-table").forEach(b => b.onclick = () => {
   b.closest(".card").querySelector(".plot").classList.toggle("hide", on);
 });
 $("#detail-select").onchange = e => { state.detail = e.target.value; renderAdDetail(); };
+$("#trend-metric").onchange = e => { state.trendMetric = e.target.value; render(); };
 
 const confirmDiscard = () =>
   !dirty.size || confirm("저장하지 않은 수정이 있습니다. 탭을 바꾸면 사라집니다. 계속할까요?");
